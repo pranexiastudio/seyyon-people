@@ -4,10 +4,15 @@ import { CreateEmployeeDto, UpdateEmployeeDto } from './dto/create-employee.dto'
 import { UserRole, AuditAction } from '@seyyon/shared';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
+import { ActivationService } from '../auth/activation.service';
 
 @Injectable()
 export class EmployeesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly activation: ActivationService) {}
+
+  async resendInvitation(tenantId: string, employeeId: string) {
+    return this.activation.invite(tenantId, employeeId);
+  }
 
   async findAll(tenantId: string, query: { search?: string; departmentId?: string; status?: string; page?: number; limit?: number }) {
     const page = Math.max(1, Number(query.page) || 1);
@@ -144,7 +149,6 @@ export class EmployeesService {
 
       // 4. Create User Login Account for Employee
       // Pending accounts have no usable password and cannot authenticate.
-      // Activation delivery/storage needs a separately approved workflow.
       const passwordHash = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
       await tx.user.create({
         data: {
@@ -156,6 +160,7 @@ export class EmployeesService {
           role: UserRole.EMPLOYEE,
           employeeId: employee.id,
           isActive: false,
+          activationPending: true,
         },
       });
       return employee;
@@ -174,7 +179,10 @@ export class EmployeesService {
       },
     }).catch(() => {});
 
-    return this.sanitizeEmployee(employee, true);
+    let activationInvitation: 'SENT' | 'RETRY_REQUIRED' = 'SENT';
+    try { await this.activation.invite(tenantId, employee.id); }
+    catch { activationInvitation = 'RETRY_REQUIRED'; }
+    return { ...this.sanitizeEmployee(employee, true), activationInvitation };
   }
 
   async update(tenantId: string, id: string, dto: UpdateEmployeeDto, actorUser: any) {
@@ -229,14 +237,16 @@ export class EmployeesService {
       total: employees.length,
       created: 0,
       failed: 0,
+      invitationsPending: 0,
       errors: [] as any[],
     };
 
     for (let i = 0; i < employees.length; i++) {
       const row = employees[i];
       try {
-        await this.create(tenantId, row, actorUser);
+        const created = await this.create(tenantId, row, actorUser);
         results.created++;
+        if (created.activationInvitation === 'RETRY_REQUIRED') results.invitationsPending++;
       } catch (err: any) {
         results.failed++;
         results.errors.push({

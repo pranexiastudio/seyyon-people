@@ -168,6 +168,7 @@ model Tenant {
   updatedAt        DateTime             @updatedAt
 
   users            User[]
+  activationTokens EmployeeActivationToken[]
   employees        Employee[]
   departments      Department[]
   designations     Designation[]
@@ -231,6 +232,8 @@ model User {
   employeeId       String?       @unique
   employee         Employee?     @relation("UserEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
   isActive         Boolean       @default(true)
+  activationPending Boolean      @default(false)
+  activationToken  EmployeeActivationToken?
   avatarUrl        String?
   lastLoginAt      DateTime?
   refreshTokenHash String?
@@ -244,6 +247,26 @@ model User {
 
   @@index([tenantId, role])
   @@index([email])
+}
+
+model EmployeeActivationToken {
+  id                 String    @id @default(uuid())
+  userId             String    @unique
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId           String
+  tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tokenHash          String    @unique
+  expiresAt          DateTime
+  sentAt             DateTime?
+  consumedAt         DateTime?
+  lastRequestedAt    DateTime  @default(now())
+  requestWindowStart DateTime  @default(now())
+  requestCount       Int       @default(1)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([tenantId, userId])
+  @@index([expiresAt])
 }
 
 model RolePermission {

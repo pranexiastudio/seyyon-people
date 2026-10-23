@@ -1,0 +1,372 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "@nestjs/common": {
+      "name": "@nestjs/common",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "file-type"
+      ],
+      "effects": [],
+      "range": "10.4.16 - 10.4.22 || 11.0.16 - 11.1.16 || 12.0.0-alpha.0 - 12.0.0-alpha.7",
+      "nodes": [
+        "node_modules/@nestjs/common"
+      ],
+      "fixAvailable": true
+    },
+    "@nestjs/core": {
+      "name": "@nestjs/core",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nestjs/platform-express",
+        "@nestjs/websockets",
+        {
+          "source": 1117063,
+          "name": "@nestjs/core",
+          "dependency": "@nestjs/core",
+          "title": "@nestjs/core Improperly Neutralizes Special Elements in Output Used by a Downstream Component ('Injection')",
+          "url": "https://github.com/advisories/GHSA-36xv-jgw5-4q75",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-74"
+          ],
+          "cvss": {
+            "score": 6.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:N/A:L"
+          },
+          "range": "<=11.1.17"
+        }
+      ],
+      "effects": [
+        "@nestjs/platform-express",
+        "@nestjs/swagger",
+        "@nestjs/testing",
+        "@nestjs/websockets"
+      ],
+      "range": "<=11.1.17",
+      "nodes": [
+        "node_modules/@nestjs/core"
+      ],
+      "fixAvailable": {
+        "name": "@nestjs/core",
+        "version": "12.2.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@nestjs/platform-express": {
+      "name": "@nestjs/platform-express",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nestjs/core"
+      ],
+      "effects": [
+        "@nestjs/core",
+        "@nestjs/testing"
+      ],
+      "range": "<=11.0.0-next.4",
+      "nodes": [
+        "node_modules/@nestjs/platform-express"
+      ],
+      "fixAvailable": {
+        "name": "@nestjs/platform-express",
+        "version": "12.2.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@nestjs/platform-socket.io": {
+      "name": "@nestjs/platform-socket.io",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nestjs/websockets"
+      ],
+      "effects": [
+        "@nestjs/websockets"
+      ],
+      "range": "<=11.0.0-next.4",
+      "nodes": [
+        "node_modules/@nestjs/platform-socket.io"
+      ],
+      "fixAvailable": {
+        "name": "@nestjs/platform-socket.io",
+        "version": "12.2.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@nestjs/swagger": {
+      "name": "@nestjs/swagger",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nestjs/core"
+      ],
+      "effects": [],
+      "range": "<=8.1.1 || 12.0.0-alpha.0 - 12.0.0-alpha.2",
+      "nodes": [
+        "node_modules/@nestjs/swagger"
+      ],
+      "fixAvailable": {
+        "name": "@nestjs/swagger",
+        "version": "12.0.3",
+        "isSemVerMajor": true
+      }
+    },
+    "@nestjs/testing": {
+      "name": "@nestjs/testing",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nestjs/core",
+        "@nestjs/platform-express"
+      ],
+      "effects": [],
+      "range": "<=11.0.0-next.4",
+      "nodes": [
+        "node_modules/@nestjs/testing"
+      ],
+      "fixAvailable": {
+        "name": "@nestjs/testing",
+        "version": "12.2.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@nestjs/websockets": {
+      "name": "@nestjs/websockets",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@nestjs/core",
+        "@nestjs/platform-socket.io"
+      ],
+      "effects": [
+        "@nestjs/core",
+        "@nestjs/platform-socket.io"
+      ],
+      "range": "<=11.0.0-next.4",
+      "nodes": [
+        "node_modules/@nestjs/websockets"
+      ],
+      "fixAvailable": {
+        "name": "@nestjs/websockets",
+        "version": "12.2.0",
+        "isSemVerMajor": true
+      }
+    },
+    "file-type": {
+      "name": "file-type",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1114301,
+          "name": "file-type",
+          "dependency": "file-type",
+          "title": "file-type affected by infinite loop in ASF parser on malformed input with zero-size sub-header",
+          "url": "https://github.com/advisories/GHSA-5v7r-6r5c-r473",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-835"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=13.0.0 <21.3.1"
+        },
+        {
+          "source": 1114726,
+          "name": "file-type",
+          "dependency": "file-type",
+          "title": "file-type: ZIP Decompression Bomb DoS via [Content_Types].xml entry",
+          "url": "https://github.com/advisories/GHSA-j47w-4g3g-c36v",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400",
+            "CWE-409"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=20.0.0 <=21.3.1"
+        }
+      ],
+      "effects": [
+        "@nestjs/common"
+      ],
+      "range": "13.0.0 - 21.3.1",
+      "nodes": [
+        "node_modules/file-type"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-nested": {
+      "name": "postcss-nested",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "postcss-selector-parser"
+      ],
+      "effects": [],
+      "range": "2.0.3 - 6.2.0",
+      "nodes": [
+        "node_modules/postcss-nested"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-selector-parser": {
+      "name": "postcss-selector-parser",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1241232,
+          "name": "postcss-selector-parser",
+          "dependency": "postcss-selector-parser",
+          "title": "PostCSS: Quadratic complexity in flat selector parsing allows CPU exhaustion",
+          "url": "https://github.com/advisories/GHSA-rj75-hqrm-r3gf",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400",
+            "CWE-407"
+          ],
+          "cvss": {
+            "score": 5.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<7.1.6"
+        }
+      ],
+      "effects": [
+        "postcss-nested",
+        "tailwindcss"
+      ],
+      "range": "<7.1.6",
+      "nodes": [
+        "node_modules/postcss-selector-parser"
+      ],
+      "fixAvailable": false
+    },
+    "react-router": {
+      "name": "react-router",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1124268,
+          "name": "react-router",
+          "dependency": "react-router",
+          "title": "React Router: Open redirect via backslash in <Link> and useNavigate (CVE-2025-68470 bypass)",
+          "url": "https://github.com/advisories/GHSA-wrjc-x8rr-h8h6",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-601"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=6.0.0 <7.18.0"
+        },
+        {
+          "source": 1124272,
+          "name": "react-router",
+          "dependency": "react-router",
+          "title": "React Router: Arbitrary Constructor Injection via deserializeErrors() in React Router SSR Hydration",
+          "url": "https://github.com/advisories/GHSA-337j-9hxr-rhxg",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-470"
+          ],
+          "cvss": {
+            "score": 6.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+          },
+          "range": ">=6.4.0 <7.18.0"
+        }
+      ],
+      "effects": [
+        "react-router-dom"
+      ],
+      "range": "6.0.0 - 7.17.0",
+      "nodes": [
+        "node_modules/react-router"
+      ],
+      "fixAvailable": {
+        "name": "react-router-dom",
+        "version": "7.18.4",
+        "isSemVerMajor": true
+      }
+    },
+    "react-router-dom": {
+      "name": "react-router-dom",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "react-router"
+      ],
+      "effects": [],
+      "range": "6.0.0-alpha.0 - 7.17.0",
+      "nodes": [
+        "node_modules/react-router-dom"
+      ],
+      "fixAvailable": {
+        "name": "react-router-dom",
+        "version": "7.18.4",
+        "isSemVerMajor": true
+      }
+    },
+    "tailwindcss": {
+      "name": "tailwindcss",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "postcss-nested",
+        "postcss-selector-parser"
+      ],
+      "effects": [
+        "tailwindcss-animate"
+      ],
+      "range": "<=0.0.0-oxide-insiders.ff2c25f || 0.5.0 - 3.4.19",
+      "nodes": [
+        "node_modules/tailwindcss"
+      ],
+      "fixAvailable": false
+    },
+    "tailwindcss-animate": {
+      "name": "tailwindcss-animate",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "tailwindcss"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/tailwindcss-animate"
+      ],
+      "fixAvailable": false
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 14,
+      "high": 0,
+      "critical": 0,
+      "total": 14
+    },
+    "dependencies": {
+      "prod": 249,
+      "dev": 645,
+      "optional": 56,
+      "peer": 25,
+      "peerOptional": 0,
+      "total": 918
+    }
+  }
+}

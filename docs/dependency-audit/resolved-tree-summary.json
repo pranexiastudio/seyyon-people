@@ -1,0 +1,109 @@
+{
+  "treeValid": true,
+  "treeProblems": [],
+  "activationFilesPreserved": true,
+  "activationFilesChecked": 21,
+  "changedActivationFiles": [],
+  "versions": [
+    {
+      "path": "apps/api/node_modules/bcrypt",
+      "version": "6.0.0"
+    },
+    {
+      "path": "node_modules/@angular-devkit/core/node_modules/picomatch",
+      "version": "4.0.7"
+    },
+    {
+      "path": "node_modules/@angular-devkit/schematics-cli/node_modules/inquirer",
+      "version": "9.3.8"
+    },
+    {
+      "path": "node_modules/@istanbuljs/load-nyc-config/node_modules/js-yaml",
+      "version": "3.15.2"
+    },
+    {
+      "path": "node_modules/@jest/reporters/node_modules/glob",
+      "version": "7.2.3"
+    },
+    {
+      "path": "node_modules/@nestjs/cli/node_modules/inquirer",
+      "version": "8.2.7"
+    },
+    {
+      "path": "node_modules/@nestjs/platform-express/node_modules/body-parser",
+      "version": "1.20.9"
+    },
+    {
+      "path": "node_modules/ajv",
+      "version": "8.20.0"
+    },
+    {
+      "path": "node_modules/body-parser",
+      "version": "2.4.0"
+    },
+    {
+      "path": "node_modules/esbuild",
+      "version": "0.25.12"
+    },
+    {
+      "path": "node_modules/glob",
+      "version": "10.5.0"
+    },
+    {
+      "path": "node_modules/jest-config/node_modules/glob",
+      "version": "7.2.3"
+    },
+    {
+      "path": "node_modules/jest-runtime/node_modules/glob",
+      "version": "7.2.3"
+    },
+    {
+      "path": "node_modules/js-yaml",
+      "version": "4.3.2"
+    },
+    {
+      "path": "node_modules/lodash",
+      "version": "4.18.1"
+    },
+    {
+      "path": "node_modules/multer",
+      "version": "2.5.0"
+    },
+    {
+      "path": "node_modules/picomatch",
+      "version": "2.3.2"
+    },
+    {
+      "path": "node_modules/qs",
+      "version": "6.16.1"
+    },
+    {
+      "path": "node_modules/schema-utils/node_modules/ajv",
+      "version": "6.15.0"
+    },
+    {
+      "path": "node_modules/test-exclude/node_modules/glob",
+      "version": "7.2.3"
+    },
+    {
+      "path": "node_modules/tinyglobby/node_modules/picomatch",
+      "version": "4.0.7"
+    },
+    {
+      "path": "node_modules/ts-loader/node_modules/picomatch",
+      "version": "4.0.7"
+    },
+    {
+      "path": "node_modules/vite",
+      "version": "6.4.5"
+    },
+    {
+      "path": "node_modules/vite/node_modules/picomatch",
+      "version": "4.0.7"
+    },
+    {
+      "path": "node_modules/webpack",
+      "version": "5.104.1"
+    }
+  ]
+}

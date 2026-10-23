@@ -1,5 +1,10 @@
 # Backend security follow-up
 
+Activation follow-up: the approved SMTP and 24-hour invitation workflow is now
+implemented in [employee-account-activation.md](employee-account-activation.md).
+Its migration is created but unapplied. The activation-pending notes below record
+the state at the end of the earlier security task.
+
 Scope: Priority 1 only. No frontend integration, schema changes, migration,
 seed execution, database resets, or existing-account password changes.
 

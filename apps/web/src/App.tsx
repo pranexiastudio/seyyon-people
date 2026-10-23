@@ -17,6 +17,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { PlatformAdminPage } from './pages/PlatformAdminPage';
 import { LoginPage } from './pages/LoginPage';
+import { ActivateAccountPage } from './pages/ActivateAccountPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +43,7 @@ export const App: React.FC = () => {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/activate" element={<ActivateAccountPage />} />
             <Route
               path="/"
               element={

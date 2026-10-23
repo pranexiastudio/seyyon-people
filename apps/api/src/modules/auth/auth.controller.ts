@@ -5,11 +5,25 @@ import { LoginDto, RefreshTokenDto } from './dto/login.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Request } from 'express';
+import { ActivationService } from './activation.service';
+import { ActivateAccountDto } from './dto/activate-account.dto';
+import { ActivationRateGuard } from './activation-rate.guard';
+import { ValidationPipe, UsePipes, BadRequestException } from '@nestjs/common';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService, private readonly activationService: ActivationService) {}
+
+  @Post('activate')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ActivationRateGuard)
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true,
+    exceptionFactory: () => new BadRequestException('Invalid activation request. Use a valid invitation and a password with 12–72 UTF-8 bytes, uppercase, lowercase, number, and symbol.') }))
+  @ApiOperation({ summary: 'Set password using a single-use employee invitation; does not sign in' })
+  async activate(@Body() dto: ActivateAccountDto) {
+    return this.activationService.activate(dto);
+  }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
