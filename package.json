@@ -1,0 +1,39 @@
+{
+  "name": "seyyon-people-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Seyyon People — All-in-One Multi-tenant HRMS & Workforce Collaboration SaaS by Pranexia Studio",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:web": "npm run dev --workspace=@seyyon/web",
+    "dev:api": "npm run start:dev --workspace=@seyyon/api",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "prisma:generate": "npm run prisma:generate --workspace=@seyyon/api",
+    "prisma:migrate": "npm run prisma:migrate --workspace=@seyyon/api",
+    "prisma:seed": "npm run prisma:seed --workspace=@seyyon/api"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.5"
+  },
+  "keywords": [
+    "hrms",
+    "saas",
+    "multi-tenant",
+    "workforce",
+    "payroll",
+    "attendance",
+    "nest-js",
+    "react",
+    "tailwind"
+  ],
+  "author": "Pranexia Studio",
+  "license": "UNLICENSED"
+}

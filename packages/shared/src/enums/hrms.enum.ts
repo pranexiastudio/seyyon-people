@@ -1,0 +1,114 @@
+export enum AttendanceStatus {
+  PRESENT = 'PRESENT',
+  ABSENT = 'ABSENT',
+  HALF_DAY = 'HALF_DAY',
+  LATE = 'LATE',
+  ON_LEAVE = 'ON_LEAVE',
+  HOLIDAY = 'HOLIDAY',
+  WEEK_OFF = 'WEEK_OFF',
+}
+
+export enum AttendancePunchSource {
+  WEB = 'WEB',
+  MOBILE = 'MOBILE',
+  BIOMETRIC_DEVICE = 'BIOMETRIC_DEVICE',
+  MANUAL_ENTRY = 'MANUAL_ENTRY',
+}
+
+export enum LeaveType {
+  CASUAL = 'CASUAL',
+  SICK = 'SICK',
+  EARNED = 'EARNED',
+  MATERNITY = 'MATERNITY',
+  PATERNITY = 'PATERNITY',
+  COMPENSATORY = 'COMPENSATORY',
+  UNPAID = 'UNPAID',
+}
+
+export enum LeaveStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum SalaryComponentType {
+  EARNING = 'EARNING',
+  DEDUCTION = 'DEDUCTION',
+  STATUTORY = 'STATUTORY',
+}
+
+export enum PayrollStatus {
+  DRAFT = 'DRAFT',
+  PROCESSING = 'PROCESSING',
+  REVIEW = 'REVIEW',
+  APPROVED = 'APPROVED',
+  FINALIZED = 'FINALIZED',
+  PAID = 'PAID',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum PaymentMode {
+  BANK_TRANSFER = 'BANK_TRANSFER',
+  CHEQUE = 'CHEQUE',
+  CASH = 'CASH',
+}
+
+export enum TaskStatus {
+  TODO = 'TODO',
+  IN_PROGRESS = 'IN_PROGRESS',
+  IN_REVIEW = 'IN_REVIEW',
+  COMPLETED = 'COMPLETED',
+  BLOCKED = 'BLOCKED',
+}
+
+export enum TaskPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  URGENT = 'URGENT',
+}
+
+export enum ChannelType {
+  DIRECT = 'DIRECT',
+  GROUP = 'GROUP',
+  DEPARTMENT = 'DEPARTMENT',
+  COMPANY = 'COMPANY',
+  PROJECT = 'PROJECT',
+}
+
+export enum MeetingStatus {
+  SCHEDULED = 'SCHEDULED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum PlanTier {
+  STARTER = 'STARTER',
+  PROFESSIONAL = 'PROFESSIONAL',
+  ENTERPRISE = 'ENTERPRISE',
+}
+
+export enum SubscriptionStatus {
+  TRIALING = 'TRIALING',
+  ACTIVE = 'ACTIVE',
+  PAST_DUE = 'PAST_DUE',
+  CANCELED = 'CANCELED',
+  SUSPENDED = 'SUSPENDED',
+}
+
+export enum AuditAction {
+  CREATE = 'CREATE',
+  UPDATE = 'UPDATE',
+  DELETE = 'DELETE',
+  LOGIN = 'LOGIN',
+  LOGOUT = 'LOGOUT',
+  LOGIN_FAILED = 'LOGIN_FAILED',
+  EXPORT = 'EXPORT',
+  IMPORT = 'IMPORT',
+  APPROVE = 'APPROVE',
+  REJECT = 'REJECT',
+  FINALIZE = 'FINALIZE',
+  PASSWORD_RESET = 'PASSWORD_RESET',
+}
