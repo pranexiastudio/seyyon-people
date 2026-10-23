@@ -116,45 +116,49 @@ export class EmployeesService {
       code = `EMP-${count.toString().padStart(3, '0')}`;
     }
 
-    // 3. Create Employee Record
-    const employee = await this.prisma.employee.create({
-      data: {
-        tenantId,
-        employeeCode: code,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        email: dto.email.toLowerCase().trim(),
-        phone: dto.phone,
-        departmentId: dto.departmentId,
-        designationId: dto.designationId,
-        managerId: dto.managerId,
-        employmentType: dto.employmentType || 'FULL_TIME',
-        dateOfJoining: dto.dateOfJoining ? new Date(dto.dateOfJoining) : new Date(),
-        panNumber: dto.panNumber,
-        bankAccount: dto.bankAccount,
-        bankIfsc: dto.bankIfsc,
-      },
-      include: {
-        department: true,
-        designation: true,
-      },
-    });
+    // Provision the employee and login atomically; failed account creation must
+    // not leave an orphan employee record.
+    const employee = await this.prisma.$transaction(async tx => {
+      const employee = await tx.employee.create({
+        data: {
+          tenantId,
+          employeeCode: code,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          email: dto.email.toLowerCase().trim(),
+          phone: dto.phone,
+          departmentId: dto.departmentId,
+          designationId: dto.designationId,
+          managerId: dto.managerId,
+          employmentType: dto.employmentType || 'FULL_TIME',
+          dateOfJoining: dto.dateOfJoining ? new Date(dto.dateOfJoining) : new Date(),
+          panNumber: dto.panNumber,
+          bankAccount: dto.bankAccount,
+          bankIfsc: dto.bankIfsc,
+        },
+        include: {
+          department: true,
+          designation: true,
+        },
+      });
 
-    // 4. Create User Login Account for Employee
-    // Pending accounts have no usable password and cannot authenticate.
-    // Activation delivery/storage needs a separately approved workflow.
-    const passwordHash = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
-    await this.prisma.user.create({
-      data: {
-        tenantId,
-        email: dto.email.toLowerCase().trim(),
-        passwordHash,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        role: UserRole.EMPLOYEE,
-        employeeId: employee.id,
-        isActive: false,
-      },
+      // 4. Create User Login Account for Employee
+      // Pending accounts have no usable password and cannot authenticate.
+      // Activation delivery/storage needs a separately approved workflow.
+      const passwordHash = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
+      await tx.user.create({
+        data: {
+          tenantId,
+          email: dto.email.toLowerCase().trim(),
+          passwordHash,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          role: UserRole.EMPLOYEE,
+          employeeId: employee.id,
+          isActive: false,
+        },
+      });
+      return employee;
     });
 
     // 5. Create Audit Log

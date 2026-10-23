@@ -1,4 +1,5 @@
 import { EmployeesService } from './employees.service';
+import * as bcrypt from 'bcrypt';
 
 describe('Employee tenant references and provisioning', () => {
   let db: any, service: EmployeesService;
@@ -15,6 +16,7 @@ describe('Employee tenant references and provisioning', () => {
       },
       user: { create: jest.fn().mockResolvedValue({}) }, auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
+    db.$transaction = jest.fn(async callback => callback(db));
     service = new EmployeesService(db);
   });
   it.each(['departmentId', 'designationId', 'managerId'])('rejects cross-tenant %s on create and update', async field => {
@@ -33,6 +35,8 @@ describe('Employee tenant references and provisioning', () => {
     expect(first.isActive).toBe(false);
     expect(first.passwordHash).not.toEqual(second.passwordHash);
     expect(first.passwordHash).toMatch(/^\$2/);
+    expect(await bcrypt.compare('Password123!', first.passwordHash)).toBe(false);
+    expect(db.$transaction).toHaveBeenCalledTimes(2);
     const result = await service.update('tenant-a', 'e', { departmentId: 'd' }, {});
     expect(result.departmentId).toBe('d');
   });
@@ -40,5 +44,12 @@ describe('Employee tenant references and provisioning', () => {
     db.employee.findFirst.mockResolvedValue(null);
     await expect(service.update('tenant-a', 'foreign', {}, {})).rejects.toThrow('not found');
     await expect(service.create(undefined, dto, {})).rejects.toThrow('Tenant context');
+  });
+
+  it('propagates account provisioning failure from the transaction before auditing success', async () => {
+    db.user.create.mockRejectedValue(new Error('Account conflict'));
+    await expect(service.create('tenant-a', dto, {})).rejects.toThrow('Account conflict');
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+    expect(db.auditLog.create).not.toHaveBeenCalled();
   });
 });

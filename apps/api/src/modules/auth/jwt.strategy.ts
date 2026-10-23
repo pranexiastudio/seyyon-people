@@ -12,6 +12,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: getJwtSecret(),
+      algorithms: ['HS256'],
     });
   }
 
@@ -35,7 +36,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
 
     if (!user || !user.isActive || user.tenant?.status === 'SUSPENDED'
-      || (user.tenantId && !user.tenant)) {
+      || (user.tenantId && !user.tenant) || (!user.tenantId && user.role !== 'PLATFORM_SUPER_ADMIN')) {
       throw new UnauthorizedException('User account is invalid or deactivated');
     }
 
@@ -45,7 +46,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         role: user.role,
         OR: [{ tenantId: user.tenantId }, { tenantId: null }],
       },
-      select: { permission: true },
+      select: { permission: true, tenantId: true },
     });
 
     return {
@@ -56,7 +57,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: user.role,
       tenantId: user.tenantId,
       employeeId: user.employeeId,
-      permissions: resolvePermissions(user.role as any, rolePermissions),
+      permissions: resolvePermissions(user.role as any,
+        rolePermissions.some(rp => rp.tenantId === user.tenantId)
+          ? rolePermissions.filter(rp => rp.tenantId === user.tenantId) : rolePermissions),
     };
   }
 }

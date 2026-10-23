@@ -45,7 +45,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    if (!user.isActive || (user.tenantId && !user.tenant)) {
+    if (!user.isActive || (user.tenantId && !user.tenant)
+      || (!user.tenantId && user.role !== 'PLATFORM_SUPER_ADMIN')) {
       throw new UnauthorizedException('This account has been deactivated. Please contact your organization administrator.');
     }
 
@@ -120,6 +121,7 @@ export class AuthService {
     try {
       const payload = this.jwtService.verify(refreshToken, {
         secret: getJwtRefreshSecret(),
+        algorithms: ['HS256'],
       });
 
       const user = await this.prisma.user.findUnique({
@@ -129,6 +131,7 @@ export class AuthService {
 
       if (payload.type !== 'refresh' || !payload.jti || !user || !user.isActive
         || user.tenant?.status === 'SUSPENDED' || (user.tenantId && !user.tenant)
+        || (!user.tenantId && user.role !== 'PLATFORM_SUPER_ADMIN')
         || !user.refreshTokenHash) {
         throw new UnauthorizedException('Invalid refresh session');
       }

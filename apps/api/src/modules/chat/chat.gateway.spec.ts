@@ -49,6 +49,51 @@ describe('ChatGateway - Security & Isolation Tests', () => {
   });
 
   describe('WebSocket Handshake JWT Authentication', () => {
+    it.each(['inactive', 'suspended', 'foreign'])('rejects %s database identity even with a valid signed token', async condition => {
+      mockSocket.handshake.auth.token = 'valid';
+      mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-001', tenantId: 'tenant-acme', exp: Math.floor(Date.now() / 1000) + 60 });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user-001', isActive: condition !== 'inactive', tenantId: condition === 'foreign' ? 'foreign' : 'tenant-acme',
+        tenant: { status: condition === 'suspended' ? 'SUSPENDED' : 'ACTIVE' },
+      });
+      await gateway.handleConnection(mockSocket);
+      expect(mockSocket.disconnect).toHaveBeenCalledWith(true);
+      expect(mockSocket.data.user).toBeUndefined();
+    });
+
+    it('disconnects at token expiry and clears its timer', async () => {
+      jest.useFakeTimers();
+      try {
+        mockSocket.handshake.auth.token = 'valid';
+        mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-001', tenantId: 'tenant-acme', exp: Math.floor(Date.now() / 1000) + 2 });
+        await gateway.handleConnection(mockSocket);
+        jest.advanceTimersByTime(2001);
+        expect(mockSocket.disconnect).toHaveBeenCalledWith(true);
+        gateway.handleDisconnect(mockSocket);
+      } finally { jest.useRealTimers(); }
+    });
+
+    it('disconnects idle subscribers after their tenant becomes suspended', async () => {
+      jest.useFakeTimers();
+      try {
+        mockSocket.handshake.auth.token = 'valid';
+        mockJwtService.verifyAsync.mockResolvedValue({ sub: 'user-001', tenantId: 'tenant-acme', exp: Math.floor(Date.now() / 1000) + 60 });
+        await gateway.handleConnection(mockSocket);
+        mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-001', isActive: true, tenantId: 'tenant-acme', tenant: { status: 'SUSPENDED' } });
+        await jest.advanceTimersByTimeAsync(15001);
+        expect(mockSocket.disconnect).toHaveBeenCalledWith(true);
+        gateway.handleDisconnect(mockSocket);
+      } finally { jest.useRealTimers(); }
+    });
+
+    it.each(['expired', 'inactive', 'suspended'])('rejects messages from a session that became %s', async condition => {
+      mockSocket.data.user = { id: 'user-001', tenantId: 'tenant-acme' };
+      if (condition === 'expired') mockSocket.data.expiresAt = Date.now() - 1;
+      else mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-001', tenantId: 'tenant-acme', isActive: condition !== 'inactive', tenant: { status: 'SUSPENDED' } });
+      await expect(gateway.handleSendMessage(mockSocket, { channelId: 'c', content: 'x' })).resolves.toEqual({ error: 'Unauthorized' });
+      expect(mockSocket.disconnect).toHaveBeenCalledWith(true);
+      expect(mockChatService.sendMessage).not.toHaveBeenCalled();
+    });
     it('should reject unauthenticated connection when no token is present', async () => {
       await gateway.handleConnection(mockSocket as unknown as Socket);
 

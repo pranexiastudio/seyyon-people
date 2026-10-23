@@ -67,6 +67,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       const payload = await this.jwtService.verifyAsync(token, {
         secret: getJwtSecret(),
+        algorithms: ['HS256'],
       });
 
       if (!payload || !payload.sub || !payload.tenantId || !Number.isFinite(payload.exp)
@@ -92,6 +93,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         role: user.role,
         tenantId: user.tenantId,
       };
+      // Recheck idle subscribers too, so suspended users stop receiving room
+      // broadcasts without needing to send another event (within 15 seconds).
+      const statusTimer = setInterval(() => { void this.validateSession(client); }, 15000);
+      statusTimer.unref();
+      client.data.statusTimer = statusTimer;
 
       this.logger.log(`Client authenticated: ${client.id} (user: ${payload.sub}, tenant: ${payload.tenantId})`);
     } catch (err) {
@@ -103,6 +109,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     clearTimeout(client.data.expiryTimer);
+    clearInterval(client.data.statusTimer);
     this.logger.log(`Client disconnected: ${client.id}`);
   }
 
@@ -224,6 +231,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.data.user = { id: user.id, email: user.email, role: user.role, tenantId: user.tenantId };
       return true;
     } catch {
+      clearTimeout(client.data.expiryTimer);
+      clearInterval(client.data.statusTimer);
       client.emit('error', { message: 'Unauthorized WebSocket session' });
       client.disconnect(true);
       return false;

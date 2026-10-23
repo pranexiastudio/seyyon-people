@@ -2,6 +2,7 @@ import { TenantGuard } from './tenant.guard';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { UserRole } from '@seyyon/shared';
+import { PLATFORM_OPERATION } from '../decorators/platform-operation.decorator';
 
 describe('TenantGuard - Zero Trust Multi-Tenant Boundary Enforcement', () => {
   let guard: TenantGuard;
@@ -23,7 +24,7 @@ describe('TenantGuard - Zero Trust Multi-Tenant Boundary Enforcement', () => {
       switchToHttp: () => ({
         getRequest: () => req,
       }),
-    } as ExecutionContext;
+    } as unknown as ExecutionContext;
   };
 
   it('should throw UnauthorizedException when request has no authenticated user', async () => {
@@ -74,5 +75,30 @@ describe('TenantGuard - Zero Trust Multi-Tenant Boundary Enforcement', () => {
     expect(result).toBe(true);
     const req: any = ctx.switchToHttp().getRequest();
     expect(req.tenantId).toBe('tenant-target');
+  });
+
+  it('requires an explicit validated tenant for super admin tenant operations', async () => {
+    const user = { role: UserRole.PLATFORM_SUPER_ADMIN };
+    await expect(guard.canActivate(createMockContext(user))).rejects.toThrow(ForbiddenException);
+    await expect(guard.canActivate(createMockContext(user, { 'x-tenant-id': 'missing' }))).rejects.toThrow('not found');
+    mockPrisma.tenant.findUnique.mockResolvedValue({ id: 's', status: 'SUSPENDED' });
+    await expect(guard.canActivate(createMockContext(user, { 'x-tenant-id': 's' }))).rejects.toThrow('suspended');
+  });
+
+  it('ignores forged tenant headers from regular users', async () => {
+    mockPrisma.tenant.findUnique.mockResolvedValue({ id: 'own', status: 'ACTIVE' });
+    const ctx = createMockContext({ role: UserRole.EMPLOYEE, tenantId: 'own' }, { 'x-tenant-id': 'foreign' });
+    await guard.canActivate(ctx);
+    expect(mockPrisma.tenant.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'own' } }));
+    expect(ctx.switchToHttp().getRequest().tenantId).toBe('own');
+  });
+
+  it('allows only explicitly marked platform operations without tenant context', async () => {
+    const ctx = createMockContext({ role: UserRole.PLATFORM_SUPER_ADMIN });
+    const handler = () => {};
+    Reflect.defineMetadata(PLATFORM_OPERATION, true, handler);
+    ctx.getHandler = () => handler;
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect(mockPrisma.tenant.findUnique).not.toHaveBeenCalled();
   });
 });
