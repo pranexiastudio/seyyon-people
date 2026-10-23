@@ -248,14 +248,14 @@ export class EmployeesService {
 
   private async validateReferences(tenantId: string, dto: Partial<CreateEmployeeDto>) {
     if (!tenantId) throw new ForbiddenException('Tenant context required');
-    for (const [field, model] of [
-      ['departmentId', this.prisma.department],
-      ['designationId', this.prisma.designation],
-      ['managerId', this.prisma.employee],
+    for (const [field, find] of [
+      ['departmentId', (id: string) => this.prisma.department.findFirst({ where: { id, tenantId } })],
+      ['designationId', (id: string) => this.prisma.designation.findFirst({ where: { id, tenantId } })],
+      ['managerId', (id: string) => this.prisma.employee.findFirst({ where: { id, tenantId } })],
     ] as const) {
       const id = dto[field];
       if (id !== undefined && (typeof id !== 'string' || !id.trim()
-        || !await model.findFirst({ where: { id, tenantId } }))) {
+        || !await find(id))) {
         throw new BadRequestException(`Invalid ${field} for this organization`);
       }
     }

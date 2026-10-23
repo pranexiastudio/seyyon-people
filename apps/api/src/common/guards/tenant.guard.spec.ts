@@ -19,6 +19,7 @@ describe('TenantGuard - Zero Trust Multi-Tenant Boundary Enforcement', () => {
   const createMockContext = (user: any, headers: Record<string, string> = {}) => {
     const req: any = { user, headers };
     return {
+      getHandler: () => function handler() {},
       switchToHttp: () => ({
         getRequest: () => req,
       }),
@@ -64,6 +65,7 @@ describe('TenantGuard - Zero Trust Multi-Tenant Boundary Enforcement', () => {
   });
 
   it('should allow Platform Super Admin to operate across platforms', async () => {
+    mockPrisma.tenant.findUnique.mockResolvedValue({ id: 'tenant-target', status: 'ACTIVE' });
     const ctx = createMockContext(
       { id: 'super-admin-01', role: UserRole.PLATFORM_SUPER_ADMIN, tenantId: null },
       { 'x-tenant-id': 'tenant-target' }

@@ -9,6 +9,7 @@ describe('ChatGateway - Security & Isolation Tests', () => {
   let mockJwtService: any;
   let mockSocket: any;
   let mockServer: any;
+  let mockPrisma: any;
 
   beforeEach(() => {
     mockChatService = {
@@ -27,7 +28,7 @@ describe('ChatGateway - Security & Isolation Tests', () => {
         headers: {},
         query: {},
       },
-      data: {},
+      data: { expiresAt: Date.now() + 60000 },
       emit: jest.fn(),
       disconnect: jest.fn(),
       join: jest.fn(),
@@ -39,7 +40,11 @@ describe('ChatGateway - Security & Isolation Tests', () => {
       emit: jest.fn(),
     };
 
-    gateway = new ChatGateway(mockChatService as ChatService, mockJwtService as JwtService);
+    mockPrisma = { user: { findUnique: jest.fn(async ({ where }) => ({
+      id: where.id, email: 'alice@acme.com', role: 'EMPLOYEE', tenantId: 'tenant-acme',
+      isActive: true, tenant: { status: 'ACTIVE' },
+    })) } };
+    gateway = new ChatGateway(mockChatService as ChatService, mockJwtService as JwtService, mockPrisma);
     gateway.server = mockServer;
   });
 
@@ -82,6 +87,7 @@ describe('ChatGateway - Security & Isolation Tests', () => {
     it('should successfully authenticate and store verified user identity derived from token', async () => {
       mockSocket.handshake.auth.token = 'valid-jwt-token';
       mockJwtService.verifyAsync.mockResolvedValue({
+        exp: Math.floor(Date.now() / 1000) + 60,
         sub: 'user-001',
         email: 'alice@acme.com',
         role: 'EMPLOYEE',
