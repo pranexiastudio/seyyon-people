@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { UserRole } from '@seyyon/shared';
+import faviconImg from '../../assets/favicon.png';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -72,8 +73,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse })
       {/* Brand Header */}
       <div className="flex items-center justify-between px-4 h-16 border-b border-slate-800">
         <div className="flex items-center space-x-3 overflow-hidden">
-          <div className="h-10 w-10 min-w-10 rounded-xl bg-gradient-to-tr from-blue-600 via-blue-500 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 font-bold text-xl">
-            S
+          <div className="h-10 w-10 min-w-10 rounded-xl bg-white p-1 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <img src={faviconImg} alt="Seyyon People Logo" className="h-full w-full object-contain" />
           </div>
           {!collapsed && (
             <div className="flex flex-col truncate">

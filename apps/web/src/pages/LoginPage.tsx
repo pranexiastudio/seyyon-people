@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Lock, Mail, ArrowRight, ShieldCheck, Sparkles, Building2 } from 'lucide-react';
 import { UserRole } from '@seyyon/shared';
+import logoImg from '../assets/logo.png';
 
 export const LoginPage: React.FC = () => {
   const { login, availableRoles } = useAuth();
@@ -32,10 +33,9 @@ export const LoginPage: React.FC = () => {
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-gradient-to-b from-blue-600/20 via-cyan-500/10 to-transparent blur-3xl pointer-events-none" />
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 text-center">
-        <div className="inline-flex h-12 w-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-blue-500 to-cyan-400 items-center justify-center text-white shadow-xl shadow-blue-500/30 font-extrabold text-2xl mb-3">
-          S
+        <div className="inline-flex p-3 rounded-2xl bg-white shadow-xl shadow-blue-500/20 mb-3 border border-slate-100">
+          <img src={logoImg} alt="Seyyon People" className="h-12 w-auto object-contain" />
         </div>
-        <h1 className="text-3xl font-extrabold text-white tracking-tight">Seyyon People</h1>
         <p className="text-xs uppercase tracking-widest text-cyan-400 font-bold mt-1">
           By Pranexia Studio
         </p>
