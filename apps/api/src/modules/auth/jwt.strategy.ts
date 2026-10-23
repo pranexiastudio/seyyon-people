@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { getJwtSecret } from '../../common/config/jwt.config';
+import { resolvePermissions } from '../../common/config/role-permissions';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -14,10 +15,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: string; email: string; tenantId?: string; role: string }) {
+  async validate(payload: { sub: string; email: string; tenantId?: string; role: string; type?: string }) {
+    if (!payload.sub || (payload.type && payload.type !== 'access')) {
+      throw new UnauthorizedException('Invalid access token');
+    }
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       include: {
+        tenant: true,
         employee: {
           select: {
             id: true,
@@ -29,7 +34,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       },
     });
 
-    if (!user || !user.isActive) {
+    if (!user || !user.isActive || user.tenant?.status === 'SUSPENDED'
+      || (user.tenantId && !user.tenant)) {
       throw new UnauthorizedException('User account is invalid or deactivated');
     }
 
@@ -50,7 +56,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: user.role,
       tenantId: user.tenantId,
       employeeId: user.employeeId,
-      permissions: rolePermissions.map((rp) => rp.permission),
+      permissions: resolvePermissions(user.role as any, rolePermissions),
     };
   }
 }

@@ -5,6 +5,8 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CurrentTenantId } from '../../common/decorators/current-tenant.decorator';
+import { PlatformOperation } from '../../common/decorators/platform-operation.decorator';
+import { Req } from '@nestjs/common';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth()
@@ -14,8 +16,9 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('metrics')
+  @PlatformOperation()
   @ApiOperation({ summary: 'Get role-tailored real-time dashboard metrics and counts' })
-  async getMetrics(@CurrentTenantId() tenantId: string, @CurrentUser() user: any) {
-    return this.dashboardService.getMetrics(tenantId, user);
+  async getMetrics(@Req() request: any, @CurrentUser() user: any) {
+    return this.dashboardService.getMetrics(request.tenantId, user);
   }
 }

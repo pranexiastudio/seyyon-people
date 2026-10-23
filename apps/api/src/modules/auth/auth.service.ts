@@ -5,6 +5,10 @@ import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { AuditAction } from '@seyyon/shared';
 import { getJwtSecret, getJwtRefreshSecret } from '../../common/config/jwt.config';
+import { createHash, randomUUID } from 'crypto';
+
+export const hashRefreshToken = (token: string) =>
+  'sha256:' + createHash('sha256').update(token).digest('hex');
 
 @Injectable()
 export class AuthService {
@@ -41,7 +45,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    if (!user.isActive) {
+    if (!user.isActive || (user.tenantId && !user.tenant)) {
       throw new UnauthorizedException('This account has been deactivated. Please contact your organization administrator.');
     }
 
@@ -71,7 +75,7 @@ export class AuthService {
     const tokens = await this.generateTokens(user);
 
     // Save refresh token hash and last login timestamp
-    const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
+    const refreshTokenHash = hashRefreshToken(tokens.refreshToken);
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
@@ -123,21 +127,27 @@ export class AuthService {
         include: { tenant: true },
       });
 
-      if (!user || !user.refreshTokenHash) {
+      if (payload.type !== 'refresh' || !payload.jti || !user || !user.isActive
+        || user.tenant?.status === 'SUSPENDED' || (user.tenantId && !user.tenant)
+        || !user.refreshTokenHash) {
         throw new UnauthorizedException('Invalid refresh session');
       }
 
-      const isRefreshTokenMatching = await bcrypt.compare(refreshToken, user.refreshTokenHash);
+      // Legacy bcrypt sessions are deliberately invalidated: they cannot provide
+      // full-token comparison due to bcrypt's 72-byte input limit. Log in again.
+      const isRefreshTokenMatching = hashRefreshToken(refreshToken) === user.refreshTokenHash;
       if (!isRefreshTokenMatching) {
         throw new UnauthorizedException('Refresh token is invalid or has been revoked');
       }
 
       const tokens = await this.generateTokens(user);
-      const newRefreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
-      await this.prisma.user.update({
-        where: { id: user.id },
+      const newRefreshTokenHash = hashRefreshToken(tokens.refreshToken);
+      const rotated = await this.prisma.user.updateMany({
+        where: { id: user.id, isActive: true, refreshTokenHash: user.refreshTokenHash,
+          ...(user.tenantId ? { tenant: { is: { status: { not: 'SUSPENDED' } } } } : {}) },
         data: { refreshTokenHash: newRefreshTokenHash },
       });
+      if (rotated.count !== 1) throw new UnauthorizedException('Refresh session revoked');
 
       return tokens;
     } catch (err) {
@@ -203,11 +213,11 @@ export class AuthService {
     };
 
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, {
+      this.jwtService.signAsync({ ...payload, type: 'access' }, {
         secret: getJwtSecret(),
         expiresIn: '15m',
       }),
-      this.jwtService.signAsync(payload, {
+      this.jwtService.signAsync({ ...payload, type: 'refresh', jti: randomUUID() }, {
         secret: getJwtRefreshSecret(),
         expiresIn: '7d',
       }),

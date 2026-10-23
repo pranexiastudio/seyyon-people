@@ -6,6 +6,12 @@ import { AttendanceStatus, AttendancePunchSource, BiometricPunchRecord, Biometri
 export class AttendanceService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async requireEmployee(tenantId: string, employeeId: string) {
+    if (!tenantId || !employeeId || !await this.prisma.employee.findFirst({ where: { id: employeeId, tenantId } })) {
+      throw new BadRequestException('Employee profile required in this organization');
+    }
+  }
+
   async clockPunch(
     tenantId: string,
     employeeId: string,
@@ -13,6 +19,7 @@ export class AttendanceService {
     source: AttendancePunchSource = AttendancePunchSource.WEB,
     ipAddress?: string
   ) {
+    await this.requireEmployee(tenantId, employeeId);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -93,6 +100,7 @@ export class AttendanceService {
   }
 
   async getTodayStatus(tenantId: string, employeeId: string) {
+    await this.requireEmployee(tenantId, employeeId);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -102,6 +110,7 @@ export class AttendanceService {
   }
 
   async getMyTimesheet(tenantId: string, employeeId: string, month?: number, year?: number) {
+    await this.requireEmployee(tenantId, employeeId);
     const currentYear = year || new Date().getFullYear();
     const currentMonth = month || new Date().getMonth() + 1;
 
@@ -261,6 +270,10 @@ export class AttendanceService {
   }
 
   async requestCorrection(tenantId: string, employeeId: string, data: { date: string; checkIn: string; checkOut: string; reason: string }) {
+    await this.requireEmployee(tenantId, employeeId);
+    if (!(new Date(data.checkOut).getTime() > new Date(data.checkIn).getTime())) {
+      throw new BadRequestException('Correction check-out must follow check-in');
+    }
     return this.prisma.attendanceCorrectionRequest.create({
       data: {
         tenantId,

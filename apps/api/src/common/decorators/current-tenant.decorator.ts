@@ -3,8 +3,8 @@ import { createParamDecorator, ExecutionContext, UnauthorizedException } from '@
 export const CurrentTenantId = createParamDecorator(
   (data: unknown, ctx: ExecutionContext): string => {
     const request = ctx.switchToHttp().getRequest();
-    const tenantId = request.tenantId || (request.user && request.user.tenantId);
-    if (!tenantId && request.user?.role !== 'PLATFORM_SUPER_ADMIN') {
+    const tenantId = request.tenantId;
+    if (typeof tenantId !== 'string' || !tenantId.trim()) {
       throw new UnauthorizedException('Tenant context is missing from request');
     }
     return tenantId;

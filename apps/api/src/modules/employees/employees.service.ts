@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './dto/create-employee.dto';
 import { UserRole, AuditAction } from '@seyyon/shared';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class EmployeesService {
@@ -85,6 +86,7 @@ export class EmployeesService {
   }
 
   async create(tenantId: string, dto: CreateEmployeeDto, actorUser: any) {
+    await this.validateReferences(tenantId, dto);
     // 1. Check Tenant Subscription Employee Limit
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -139,8 +141,9 @@ export class EmployeesService {
     });
 
     // 4. Create User Login Account for Employee
-    const defaultPassword = 'Password123!';
-    const passwordHash = await bcrypt.hash(defaultPassword, 10);
+    // Pending accounts have no usable password and cannot authenticate.
+    // Activation delivery/storage needs a separately approved workflow.
+    const passwordHash = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
     await this.prisma.user.create({
       data: {
         tenantId,
@@ -150,6 +153,7 @@ export class EmployeesService {
         lastName: dto.lastName,
         role: UserRole.EMPLOYEE,
         employeeId: employee.id,
+        isActive: false,
       },
     });
 
@@ -170,6 +174,7 @@ export class EmployeesService {
   }
 
   async update(tenantId: string, id: string, dto: UpdateEmployeeDto, actorUser: any) {
+    await this.validateReferences(tenantId, dto);
     const employee = await this.prisma.employee.findFirst({
       where: { id, tenantId },
     });
@@ -239,6 +244,21 @@ export class EmployeesService {
     }
 
     return results;
+  }
+
+  private async validateReferences(tenantId: string, dto: Partial<CreateEmployeeDto>) {
+    if (!tenantId) throw new ForbiddenException('Tenant context required');
+    for (const [field, model] of [
+      ['departmentId', this.prisma.department],
+      ['designationId', this.prisma.designation],
+      ['managerId', this.prisma.employee],
+    ] as const) {
+      const id = dto[field];
+      if (id !== undefined && (typeof id !== 'string' || !id.trim()
+        || !await model.findFirst({ where: { id, tenantId } }))) {
+        throw new BadRequestException(`Invalid ${field} for this organization`);
+      }
+    }
   }
 
   private sanitizeEmployee(employee: any, includeSensitive = false) {

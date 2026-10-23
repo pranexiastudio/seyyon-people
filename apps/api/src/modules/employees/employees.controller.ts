@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, ParseArrayPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './dto/create-employee.dto';
@@ -66,7 +66,7 @@ export class EmployeesController {
   @ApiOperation({ summary: 'Bulk import employees from validated CSV/JSON array' })
   async bulkImport(
     @CurrentTenantId() tenantId: string,
-    @Body() employees: CreateEmployeeDto[],
+    @Body(new ParseArrayPipe({ items: CreateEmployeeDto, whitelist: true, forbidNonWhitelisted: true })) employees: CreateEmployeeDto[],
     @CurrentUser() user: any
   ) {
     return this.employeesService.importBulk(tenantId, employees, user);

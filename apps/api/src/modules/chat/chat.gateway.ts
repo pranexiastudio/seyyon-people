@@ -13,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ChatService } from './chat.service';
 import { getJwtSecret } from '../../common/config/jwt.config';
 import { getAllowedOrigins } from '../../common/config/cors.config';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @WebSocketGateway({
   cors: {
@@ -41,7 +42,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(
     private readonly chatService: ChatService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async handleConnection(client: Socket) {
@@ -67,19 +69,28 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         secret: getJwtSecret(),
       });
 
-      if (!payload || !payload.sub || !payload.tenantId) {
+      if (!payload || !payload.sub || !payload.tenantId || !Number.isFinite(payload.exp)
+        || payload.exp * 1000 <= Date.now() || (payload.type && payload.type !== 'access')) {
         this.logger.warn(`Rejected WebSocket connection: invalid claims from ${client.id}`);
         client.emit('error', { message: 'Invalid token claims' });
         client.disconnect(true);
         return;
       }
 
-      // Store verified identity derived strictly from verified token
+      const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, include: { tenant: true } });
+      if (!user?.isActive || !user.tenantId || user.tenantId !== payload.tenantId
+        || !user.tenant || user.tenant.status === 'SUSPENDED') {
+        throw new Error('Account or tenant unavailable');
+      }
+      client.data.expiresAt = payload.exp * 1000;
+      const expiryTimer = setTimeout(() => client.disconnect(true), client.data.expiresAt - Date.now());
+      expiryTimer.unref();
+      client.data.expiryTimer = expiryTimer;
       client.data.user = {
-        id: payload.sub,
-        email: payload.email,
-        role: payload.role,
-        tenantId: payload.tenantId,
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        tenantId: user.tenantId,
       };
 
       this.logger.log(`Client authenticated: ${client.id} (user: ${payload.sub}, tenant: ${payload.tenantId})`);
@@ -91,6 +102,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   handleDisconnect(client: Socket) {
+    clearTimeout(client.data.expiryTimer);
     this.logger.log(`Client disconnected: ${client.id}`);
   }
 
@@ -99,6 +111,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { channelId: string }
   ) {
+    if (!await this.validateSession(client)) return { error: 'Unauthorized' };
     const user = client.data?.user;
     if (!user || !user.tenantId || !user.id) {
       client.emit('error', { message: 'Unauthorized WebSocket session' });
@@ -159,6 +172,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       attachmentUrl?: string;
     }
   ) {
+    if (!await this.validateSession(client)) return { error: 'Unauthorized' };
     const user = client.data?.user;
     if (!user || !user.tenantId || !user.id) {
       client.emit('error', { message: 'Unauthorized WebSocket session' });
@@ -196,5 +210,23 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(room).emit('new_message', message);
 
     return message;
+  }
+
+  private async validateSession(client: Socket): Promise<boolean> {
+    const identity = client.data?.user;
+    try {
+      if (!identity?.id || !client.data.expiresAt || client.data.expiresAt <= Date.now()) {
+        throw new Error('Expired session');
+      }
+      const user = await this.prisma.user.findUnique({ where: { id: identity.id }, include: { tenant: true } });
+      if (!user?.isActive || !user.tenantId || user.tenantId !== identity.tenantId
+        || !user.tenant || user.tenant.status === 'SUSPENDED') throw new Error('Account unavailable');
+      client.data.user = { id: user.id, email: user.email, role: user.role, tenantId: user.tenantId };
+      return true;
+    } catch {
+      client.emit('error', { message: 'Unauthorized WebSocket session' });
+      client.disconnect(true);
+      return false;
+    }
   }
 }

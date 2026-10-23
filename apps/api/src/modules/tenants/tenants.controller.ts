@@ -7,6 +7,8 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentTenantId } from '../../common/decorators/current-tenant.decorator';
 import { UserRole, SubscriptionStatus } from '@seyyon/shared';
+import { PlatformOperation } from '../../common/decorators/platform-operation.decorator';
+import { UpdateTenantDto, TenantStatusDto } from './tenants.dto';
 
 @ApiTags('Tenants & SaaS Operations')
 @ApiBearerAuth()
@@ -16,6 +18,7 @@ export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
 
   @Get('platform/all')
+  @PlatformOperation()
   @Roles(UserRole.PLATFORM_SUPER_ADMIN)
   @ApiOperation({ summary: 'Platform SuperAdmin: View all customer organization tenants' })
   async getAllTenants() {
@@ -39,17 +42,18 @@ export class TenantsController {
   @ApiOperation({ summary: 'Update organization settings' })
   async updateCurrentTenant(
     @CurrentTenantId() tenantId: string,
-    @Body() body: { name?: string; address?: string; currency?: string; timezone?: string }
+    @Body() body: UpdateTenantDto
   ) {
     return this.tenantsService.updateTenant(tenantId, body);
   }
 
   @Put(':id/status')
+  @PlatformOperation()
   @Roles(UserRole.PLATFORM_SUPER_ADMIN)
   @ApiOperation({ summary: 'Platform SuperAdmin: Suspend or reactivate customer tenant' })
   async setStatus(
     @Param('id') id: string,
-    @Body() body: { status: SubscriptionStatus }
+    @Body() body: TenantStatusDto
   ) {
     return this.tenantsService.setTenantStatus(id, body.status);
   }

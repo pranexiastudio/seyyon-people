@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PayrollStatus, IndianStatutoryDeductionBreakdown, UserRole } from '@seyyon/shared';
+import { PayrollStatus, IndianStatutoryDeductionBreakdown, UserRole, Permission } from '@seyyon/shared';
 
 @Injectable()
 export class PayrollService {
@@ -247,6 +247,7 @@ export class PayrollService {
   }
 
   async getMyPayslips(tenantId: string, employeeId: string) {
+    if (!tenantId || !employeeId) throw new ForbiddenException('Tenant and employee profile required');
     return this.prisma.payslip.findMany({
       where: { tenantId, employeeId },
       include: {
@@ -257,6 +258,9 @@ export class PayrollService {
   }
 
   async getPayslipById(tenantId: string, id: string, user: any) {
+    if (!tenantId || (user.role !== UserRole.PLATFORM_SUPER_ADMIN && user.tenantId !== tenantId)) {
+      throw new ForbiddenException('Invalid tenant context');
+    }
     const payslip = await this.prisma.payslip.findFirst({
       where: { id, tenantId },
       include: {
@@ -276,7 +280,10 @@ export class PayrollService {
     }
 
     // Role check: employee can only view their own
-    if (user.role === UserRole.EMPLOYEE && payslip.employeeId !== user.employeeId) {
+    const canReadAll = user.role === UserRole.COMPANY_ADMIN
+      || user.role === UserRole.PLATFORM_SUPER_ADMIN
+      || user.permissions?.includes(Permission.PAYROLL_READ_ALL);
+    if (!canReadAll && (!user.employeeId || payslip.employeeId !== user.employeeId)) {
       throw new ForbiddenException('You are not authorized to view another employee payslip');
     }
 

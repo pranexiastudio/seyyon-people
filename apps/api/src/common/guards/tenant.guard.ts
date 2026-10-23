@@ -1,6 +1,8 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UserRole } from '@seyyon/shared';
+import { Reflector } from '@nestjs/core';
+import { PLATFORM_OPERATION } from '../decorators/platform-operation.decorator';
 
 @Injectable()
 export class TenantGuard implements CanActivate {
@@ -14,22 +16,19 @@ export class TenantGuard implements CanActivate {
       throw new UnauthorizedException('Authentication required');
     }
 
-    // Platform Super Admin bypasses tenant restrictions or can scope to a tenant via header
-    if (user.role === UserRole.PLATFORM_SUPER_ADMIN) {
-      const explicitTenantId = request.headers['x-tenant-id'] as string;
-      if (explicitTenantId) {
-        request.tenantId = explicitTenantId;
-      }
+    const platformOperation = new Reflector().get<boolean>(PLATFORM_OPERATION, context.getHandler());
+    if (platformOperation && user.role === UserRole.PLATFORM_SUPER_ADMIN) {
       return true;
     }
-
-    if (!user.tenantId) {
+    const tenantId = user.role === UserRole.PLATFORM_SUPER_ADMIN
+      ? request.headers['x-tenant-id'] : user.tenantId;
+    if (typeof tenantId !== 'string' || !tenantId.trim()) {
       throw new ForbiddenException('User is not associated with any organization tenant');
     }
 
     // Verify tenant is active in database (or cached)
     const tenant = await this.prisma.tenant.findUnique({
-      where: { id: user.tenantId },
+      where: { id: tenantId },
       select: { id: true, status: true, slug: true, name: true },
     });
 
