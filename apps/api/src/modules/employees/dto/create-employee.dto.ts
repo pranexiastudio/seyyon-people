@@ -1,5 +1,6 @@
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString, IsOptional, IsEnum, IsDateString } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, IsOptional, IsEnum, IsDateString, ValidateIf } from 'class-validator';
 import { EmploymentType, EmployeeStatus } from '@seyyon/shared';
 
 export class CreateEmployeeDto {
@@ -73,12 +74,16 @@ export class CreateEmployeeDto {
 export class UpdateEmployeeDto {
   @ApiPropertyOptional()
   @IsString()
-  @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsNotEmpty()
+  @ValidateIf((_object, value) => value !== undefined)
   firstName?: string;
 
   @ApiPropertyOptional()
   @IsString()
-  @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsNotEmpty()
+  @ValidateIf((_object, value) => value !== undefined)
   lastName?: string;
 
   @ApiPropertyOptional()
@@ -88,22 +93,26 @@ export class UpdateEmployeeDto {
 
   @ApiPropertyOptional()
   @IsString()
-  @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsNotEmpty()
+  @ValidateIf((_object, value) => value !== undefined)
   departmentId?: string;
 
   @ApiPropertyOptional()
   @IsString()
-  @IsOptional()
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsNotEmpty()
+  @ValidateIf((_object, value) => value !== undefined)
   designationId?: string;
 
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()
-  managerId?: string;
+  managerId?: string | null;
 
   @ApiPropertyOptional({ enum: EmployeeStatus })
   @IsEnum(EmployeeStatus)
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   status?: EmployeeStatus;
 
   @ApiPropertyOptional()

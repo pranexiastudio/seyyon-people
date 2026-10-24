@@ -166,25 +166,28 @@ export class AuthService {
     return { success: true, message: 'Logged out successfully' };
   }
 
+  async logoutRefreshSession(token: string) {
+    let payload: any;
+    try {
+      // Expired cookies can still revoke their exact stored session. No access is granted.
+      payload = this.jwtService.verify(token, {
+        secret: getJwtRefreshSecret(), algorithms: ['HS256'], ignoreExpiration: true,
+      });
+    } catch { return; }
+    if (payload.type !== 'refresh' || !payload.sub || !payload.jti) return;
+    await this.prisma.user.updateMany({
+      where: { id: payload.sub, refreshTokenHash: hashRefreshToken(token) },
+      data: { refreshTokenHash: null },
+    });
+  }
+
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        tenant: true,
-        employee: {
-          include: {
-            department: true,
-            designation: true,
-            manager: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-              },
-            },
-          },
-        },
+      select: {
+        id: true, email: true, firstName: true, lastName: true, role: true,
+        tenantId: true, employeeId: true, avatarUrl: true, lastLoginAt: true,
+        tenant: { select: { id: true, name: true, planTier: true, status: true } },
       },
     });
 
@@ -201,7 +204,6 @@ export class AuthService {
       tenantId: user.tenantId,
       tenant: user.tenant,
       employeeId: user.employeeId,
-      employee: user.employee,
       avatarUrl: user.avatarUrl,
       lastLoginAt: user.lastLoginAt,
     };

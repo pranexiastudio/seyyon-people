@@ -1,10 +1,12 @@
-import { Controller, Post, Body, Get, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Req, Res, HttpCode, HttpStatus, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { LoginDto, RefreshTokenDto } from './dto/login.dto';
+import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { Request } from 'express';
+import { Request, Response } from 'express';
+import { BrowserAuthGuard } from './browser-auth.guard';
+import { clearRefreshCookie, readRefreshCookie, writeRefreshCookie } from './browser-session';
 import { ActivationService } from './activation.service';
 import { ActivateAccountDto } from './dto/activate-account.dto';
 import { ActivationRateGuard } from './activation-rate.guard';
@@ -26,39 +28,69 @@ export class AuthController {
   }
 
   @Post('login')
+  @UseGuards(BrowserAuthGuard)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Authenticate user and obtain JWT tokens' })
-  @ApiResponse({ status: 200, description: 'Authentication successful with JWT access and refresh tokens' })
+  @ApiOperation({ summary: 'Browser login: return access token and set HttpOnly refresh cookie' })
+  @ApiResponse({ status: 200, description: 'Access token, expiry and user; refresh token only in HttpOnly cookie' })
   @ApiResponse({ status: 401, description: 'Invalid credentials or inactive account' })
-  async login(@Body() loginDto: LoginDto, @Req() req: Request) {
-    const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress;
+  async login(@Body() loginDto: LoginDto, @Req() req: Request, @Res({ passthrough: true }) response: Response) {
+    response.setHeader('Cache-Control', 'no-store');
+    const ipAddress = req.ip || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
-    return this.authService.login(loginDto, ipAddress, userAgent);
+    const { refreshToken, ...result } = await this.authService.login(loginDto, ipAddress, userAgent);
+    writeRefreshCookie(response, refreshToken);
+    return result;
   }
 
   @Post('refresh')
+  @UseGuards(BrowserAuthGuard)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Rotate refresh token and retrieve new access token' })
+  @ApiOperation({ summary: 'Rotate HttpOnly refresh cookie and retrieve new access token; empty JSON body' })
   @ApiResponse({ status: 200, description: 'Tokens successfully refreshed' })
   @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
-  async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.authService.refreshTokens(refreshTokenDto.refreshToken);
+  async refresh(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    response.setHeader('Cache-Control', 'no-store');
+    this.requireEmptyBody(request);
+    const token = readRefreshCookie(request);
+    if (!token) throw new UnauthorizedException('Refresh session required');
+    // Do not clear cookies on a failed rotation: another tab may have rotated successfully.
+    const { refreshToken, ...result } = await this.authService.refreshTokens(token);
+    writeRefreshCookie(response, refreshToken);
+    return result;
   }
 
   @Post('logout')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  @UseGuards(BrowserAuthGuard)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Invalidate current refresh session' })
-  async logout(@CurrentUser() user: any) {
-    return this.authService.logout(user.id);
+  @ApiOperation({ summary: 'Revoke matching refresh-cookie session and clear cookie; access token not required' })
+  async logout(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    response.setHeader('Cache-Control', 'no-store');
+    this.requireEmptyBody(request);
+    let token: string | undefined;
+    try {
+      token = readRefreshCookie(request);
+    } catch (error) {
+      clearRefreshCookie(response);
+      throw error;
+    }
+    // Keep a valid cookie on storage failure so sign-out can actually be retried.
+    if (token) await this.authService.logoutRefreshSession(token);
+    clearRefreshCookie(response);
+    return { success: true, message: 'Logged out successfully' };
   }
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Retrieve currently authenticated user profile and permissions' })
-  async getMe(@CurrentUser() user: any) {
-    return this.authService.getMe(user.id);
+  async getMe(@CurrentUser() user: any, @Res({ passthrough: true }) response: Response) {
+    response.setHeader('Cache-Control', 'no-store');
+    return { ...await this.authService.getMe(user.id), permissions: user.permissions };
+  }
+
+  private requireEmptyBody(request: Request) {
+    if (request.body && Object.keys(request.body).length) {
+      throw new BadRequestException('This endpoint accepts only the refresh cookie');
+    }
   }
 }

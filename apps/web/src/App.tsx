@@ -1,7 +1,9 @@
 import React from 'react';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { UserRole } from '@seyyon/shared';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { EmployeesPage } from './pages/EmployeesPage';
@@ -27,14 +29,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-  return <>{children}</>;
-};
 
 export const App: React.FC = () => {
   return (
@@ -64,7 +58,7 @@ export const App: React.FC = () => {
               <Route path="performance" element={<PerformancePage />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="settings" element={<SettingsPage />} />
-              <Route path="platform-admin" element={<PlatformAdminPage />} />
+              <Route path="platform-admin" element={<ProtectedRoute role={UserRole.PLATFORM_SUPER_ADMIN}><PlatformAdminPage /></ProtectedRoute>} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

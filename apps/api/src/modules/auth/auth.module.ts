@@ -7,6 +7,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { ActivationService } from './activation.service';
 import { ActivationMailService } from './activation-mail.service';
 import { ActivationRateGuard } from './activation-rate.guard';
+import { BrowserAuthGuard } from './browser-auth.guard';
 
 @Module({
   imports: [
@@ -14,7 +15,7 @@ import { ActivationRateGuard } from './activation-rate.guard';
     JwtModule.register({}),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, ActivationService, ActivationMailService, ActivationRateGuard],
+  providers: [AuthService, JwtStrategy, ActivationService, ActivationMailService, ActivationRateGuard, BrowserAuthGuard],
   exports: [AuthService, JwtStrategy, PassportModule, ActivationService, ActivationRateGuard],
 })
 export class AuthModule {}

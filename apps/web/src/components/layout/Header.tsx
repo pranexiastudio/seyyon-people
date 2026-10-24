@@ -9,8 +9,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onOpenNotifications, unreadCount = 3 }) => {
-  const { user, logout, switchRole, availableRoles } = useAuth();
-  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const { user, logout } = useAuth();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [clockedIn, setClockedIn] = useState(false);
   const [punchFeedback, setPunchFeedback] = useState<string | null>(null);
@@ -79,61 +78,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNotifications, unreadCount
           </div>
         )}
 
-        {/* Role Switcher Dropdown (Interactive Pair Programming Testing Utility) */}
-        <div className="relative">
-          <button
-            onClick={() => setRoleMenuOpen(!roleMenuOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/80 hover:bg-blue-100/80 text-blue-900 border border-blue-200/80 rounded-lg text-xs font-semibold transition-all"
-            title="Switch demo role to inspect role-tailored permissions and screens"
-          >
-            <ShieldCheck size={15} className="text-blue-600" />
-            <span className="hidden sm:inline">Role: {user?.role?.replace(/_/g, ' ')}</span>
-            <ChevronDown size={14} className="text-blue-600" />
-          </button>
-
-          {roleMenuOpen && (
-            <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2">
-              <div className="px-3 py-1.5 border-b border-slate-100">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  Switch Active Role Persona
-                </p>
-                <p className="text-[10px] text-slate-400">
-                  Simulates multi-tenant RBAC permissions across all modules
-                </p>
-              </div>
-              <div className="max-h-64 overflow-y-auto py-1">
-                {availableRoles.map((r) => {
-                  const isActive = user?.email === r.email;
-                  return (
-                    <button
-                      key={r.email}
-                      onClick={() => {
-                        switchRole(r.email);
-                        setRoleMenuOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 flex items-start gap-2.5 transition-colors ${
-                        isActive ? 'bg-blue-50/80 text-blue-900' : 'hover:bg-slate-50 text-slate-700'
-                      }`}
-                    >
-                      <div className="pt-0.5">
-                        {isActive ? (
-                          <CheckCircle2 size={15} className="text-blue-600" />
-                        ) : (
-                          <div className="h-3.5 w-3.5 rounded-full border border-slate-300 mt-0.5" />
-                        )}
-                      </div>
-                      <div className="flex-1 truncate">
-                        <p className="text-xs font-semibold truncate leading-tight">{r.label}</p>
-                        <p className="text-[10px] text-slate-400 truncate">{r.subtitle}</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* Notifications Bell */}
         <button
           onClick={onOpenNotifications}
@@ -186,7 +130,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenNotifications, unreadCount
               <button
                 onClick={() => {
                   setProfileMenuOpen(false);
-                  logout();
+                  void logout().catch(() => undefined);
                 }}
                 className="w-full text-left px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2"
               >

@@ -27,21 +27,8 @@ export const AppLayout: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Environment Demo Notice Banner */}
-        <div className="bg-gradient-to-r from-blue-900 via-navy-800 to-indigo-900 text-cyan-200 text-xs px-4 py-1.5 flex items-center justify-between border-b border-blue-900 select-none">
-          <div className="flex items-center gap-2 truncate">
-            <Info size={14} className="text-cyan-400 shrink-0" />
-            <span className="font-semibold text-white">Seyyon People — Enterprise Demo Environment:</span>
-            <span className="truncate">
-              Organization:{' '}
-              <span className="text-white font-bold">{user?.tenantName || 'Acme Technologies'}</span> | Plan:{' '}
-              <span className="text-cyan-300 font-bold capitalize">{user?.planTier?.toLowerCase() || 'Professional'}</span> | Role:{' '}
-              <span className="text-emerald-300 font-bold">{user?.role?.replace(/_/g, ' ')}</span>
-            </span>
-          </div>
-          <div className="hidden lg:flex items-center gap-2 text-[11px] text-cyan-300/80">
-            <span>Switch personas via the header role selector anytime</span>
-          </div>
+        <div className="bg-slate-900 text-white text-xs px-4 py-2">
+          {user?.tenantName || 'Platform workspace'} | {user?.role?.replace(/_/g, ' ')}
         </div>
 
         {/* Top Header */}

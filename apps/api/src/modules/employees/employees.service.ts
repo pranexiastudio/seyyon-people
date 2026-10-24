@@ -2,9 +2,13 @@ import { Injectable, NotFoundException, ConflictException, ForbiddenException, B
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './dto/create-employee.dto';
 import { UserRole, AuditAction } from '@seyyon/shared';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { ActivationService } from '../auth/activation.service';
+import { EmployeeListQueryDto } from './dto/employee-list-query.dto';
+import { canViewEmployeePrivate, EmployeeActor, employeeDetailsResponse, employeeDetailsSelect, employeeDirectoryResponse, employeeDirectorySelect } from './employee-response';
+import { employeeConflictMessage, safeEmployeeError, safeEmployeeImportMessage } from './employee-errors';
 
 @Injectable()
 export class EmployeesService {
@@ -14,9 +18,10 @@ export class EmployeesService {
     return this.activation.invite(tenantId, employeeId);
   }
 
-  async findAll(tenantId: string, query: { search?: string; departmentId?: string; status?: string; page?: number; limit?: number }) {
-    const page = Math.max(1, Number(query.page) || 1);
-    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+  async findAll(tenantId: string, query: EmployeeListQueryDto) {
+    this.requireTenant(tenantId);
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
     const where: any = { tenantId };
@@ -46,16 +51,12 @@ export class EmployeesService {
         skip,
         take: limit,
         orderBy: { employeeCode: 'asc' },
-        include: {
-          department: { select: { id: true, name: true, code: true } },
-          designation: { select: { id: true, title: true, code: true } },
-          manager: { select: { id: true, firstName: true, lastName: true } },
-        },
+        select: employeeDirectorySelect,
       }),
-    ]);
+    ]).catch(error => { throw safeEmployeeError(error); });
 
     return {
-      items: items.map((emp) => this.sanitizeEmployee(emp, false)),
+      items: items.map(employeeDirectoryResponse),
       pagination: {
         page,
         limit,
@@ -65,33 +66,29 @@ export class EmployeesService {
     };
   }
 
-  async findById(tenantId: string, id: string, requestingUser: any) {
+  async findById(tenantId: string, id: string, requestingUser: EmployeeActor) {
+    this.requireTenant(tenantId);
+    const includePrivate = canViewEmployeePrivate(requestingUser, tenantId, id);
     const employee = await this.prisma.employee.findFirst({
       where: { id, tenantId },
-      include: {
-        department: true,
-        designation: true,
-        manager: {
-          select: { id: true, firstName: true, lastName: true, email: true },
-        },
-        subordinates: {
-          select: { id: true, firstName: true, lastName: true, employeeCode: true },
-        },
-      },
-    });
+      select: employeeDetailsSelect(includePrivate, tenantId),
+    }).catch(error => { throw safeEmployeeError(error); });
 
     if (!employee) {
-      throw new NotFoundException(`Employee with ID ${id} not found in this organization`);
+      throw new NotFoundException('Employee not found in this organization');
     }
 
-    const isSelf = requestingUser.employeeId === employee.id;
-    const isHrOrAdmin = [UserRole.COMPANY_ADMIN, UserRole.HR_ADMIN, UserRole.PLATFORM_SUPER_ADMIN].includes(requestingUser.role);
-
-    return this.sanitizeEmployee(employee, isSelf || isHrOrAdmin);
+    return employeeDetailsResponse(employee, includePrivate);
   }
 
-  async create(tenantId: string, dto: CreateEmployeeDto, actorUser: any) {
+  async create(tenantId: string, dto: CreateEmployeeDto, actorUser: EmployeeActor) {
+    try { return await this.createEmployee(tenantId, dto, actorUser); }
+    catch (error) { throw safeEmployeeError(error); }
+  }
+
+  private async createEmployee(tenantId: string, dto: CreateEmployeeDto, actorUser: EmployeeActor) {
     await this.validateReferences(tenantId, dto);
+    const includePrivate = canViewEmployeePrivate(actorUser, tenantId);
     // 1. Check Tenant Subscription Employee Limit
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -111,7 +108,7 @@ export class EmployeesService {
       where: { tenantId, email: dto.email.toLowerCase().trim() },
     });
     if (existingEmail) {
-      throw new ConflictException(`An employee with email ${dto.email} already exists in your organization`);
+      throw new ConflictException(employeeConflictMessage);
     }
 
     // Auto-generate employee code if missing
@@ -141,10 +138,7 @@ export class EmployeesService {
           bankAccount: dto.bankAccount,
           bankIfsc: dto.bankIfsc,
         },
-        include: {
-          department: true,
-          designation: true,
-        },
+        select: employeeDetailsSelect(includePrivate, tenantId),
       });
 
       // 4. Create User Login Account for Employee
@@ -182,37 +176,72 @@ export class EmployeesService {
     let activationInvitation: 'SENT' | 'RETRY_REQUIRED' = 'SENT';
     try { await this.activation.invite(tenantId, employee.id); }
     catch { activationInvitation = 'RETRY_REQUIRED'; }
-    return { ...this.sanitizeEmployee(employee, true), activationInvitation };
+    return { ...employeeDetailsResponse(employee, includePrivate), activationInvitation };
   }
 
-  async update(tenantId: string, id: string, dto: UpdateEmployeeDto, actorUser: any) {
-    await this.validateReferences(tenantId, dto);
-    const employee = await this.prisma.employee.findFirst({
-      where: { id, tenantId },
-    });
+  async update(tenantId: string, id: string, dto: UpdateEmployeeDto, actorUser: EmployeeActor) {
+    try { return await this.updateEmployee(tenantId, id, dto, actorUser); }
+    catch (error) { throw safeEmployeeError(error); }
+  }
 
-    if (!employee) {
-      throw new NotFoundException(`Employee with ID ${id} not found`);
-    }
-
-    const updated = await this.prisma.employee.update({
-      where: { id },
-      data: {
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        phone: dto.phone,
-        departmentId: dto.departmentId,
-        designationId: dto.designationId,
-        managerId: dto.managerId,
-        status: dto.status,
-        emergencyContactName: dto.emergencyContactName,
-        emergencyContactPhone: dto.emergencyContactPhone,
-        address: dto.address,
-      },
-      include: {
-        department: true,
-        designation: true,
-      },
+  private async updateEmployee(tenantId: string, id: string, dto: UpdateEmployeeDto, actorUser: EmployeeActor) {
+    this.requireTenant(tenantId);
+    const includePrivate = canViewEmployeePrivate(actorUser, tenantId, id);
+    const { employee, updated } = await this.prisma.$transaction(async tx => {
+      // Serialize hierarchy edits so two concurrent edits cannot introduce a cycle.
+      if (dto.managerId !== undefined) {
+        await tx.$queryRaw`SELECT "id" FROM "Tenant" WHERE "id" = ${tenantId} FOR UPDATE`;
+      }
+      // Match activation's account lock order. Never locate a login by email.
+      const linked = await tx.user.findFirst({ where: { employeeId: id, tenantId }, select: { id: true } });
+      if (linked) await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${linked.id} AND "tenantId" = ${tenantId} AND "employeeId" = ${id} FOR UPDATE`;
+      await tx.$queryRaw`SELECT "id" FROM "Employee" WHERE "id" = ${id} AND "tenantId" = ${tenantId} FOR UPDATE`;
+      const employee = await tx.employee.findFirst({
+        where: { id, tenantId }, select: { id: true, status: true, departmentId: true, designationId: true },
+      });
+      if (!employee) throw new NotFoundException('Employee not found in this organization');
+      await this.validateReferences(tenantId, dto, tx);
+      if (dto.departmentId !== undefined || dto.designationId !== undefined) {
+        const designation = await tx.designation.findFirst({ where: { id: dto.designationId ?? employee.designationId, tenantId } });
+        if (!designation || (designation.departmentId != null && designation.departmentId !== (dto.departmentId ?? employee.departmentId))) {
+          throw new BadRequestException('Designation does not belong to the selected department');
+        }
+      }
+      if (dto.managerId) {
+        const seen = new Set([id]);
+        let cursor: string | null = dto.managerId;
+        while (cursor) {
+          if (seen.has(cursor)) throw new BadRequestException('Invalid reporting hierarchy');
+          seen.add(cursor);
+          const manager = await tx.employee.findFirst({ where: { id: cursor, tenantId }, select: { managerId: true } });
+          if (!manager) throw new BadRequestException('Invalid managerId for this organization');
+          cursor = manager.managerId;
+        }
+      }
+      const updated = await tx.employee.update({
+        where: { id, tenantId },
+        data: {
+          firstName: dto.firstName, lastName: dto.lastName, phone: dto.phone,
+          departmentId: dto.departmentId, designationId: dto.designationId, managerId: dto.managerId,
+          status: dto.status, emergencyContactName: dto.emergencyContactName,
+          emergencyContactPhone: dto.emergencyContactPhone, address: dto.address,
+        },
+        select: employeeDetailsSelect(includePrivate, tenantId),
+      });
+      const offboarded = ['TERMINATED', 'RESIGNED'].includes(updated.status);
+      if (linked && (offboarded || dto.firstName !== undefined || dto.lastName !== undefined)) {
+        const changed = await tx.user.updateMany({
+          where: { id: linked.id, tenantId, employeeId: id },
+          data: { firstName: dto.firstName, lastName: dto.lastName,
+            ...(offboarded ? { isActive: false, refreshTokenHash: null } : {}) },
+        });
+        if (changed.count !== 1) throw new ConflictException('Linked account changed. Reload the employee before retrying');
+      }
+      if (linked && offboarded) {
+        await tx.employeeActivationToken.updateMany({ where: { userId: linked.id, tenantId, consumedAt: null }, data: { consumedAt: new Date() } });
+      }
+      // Returning to an employed status never activates an inactive or pending login.
+      return { employee, updated };
     });
 
     // Audit Log
@@ -229,16 +258,16 @@ export class EmployeesService {
       },
     }).catch(() => {});
 
-    return this.sanitizeEmployee(updated, true);
+    return employeeDetailsResponse(updated, includePrivate);
   }
 
-  async importBulk(tenantId: string, employees: CreateEmployeeDto[], actorUser: any) {
+  async importBulk(tenantId: string, employees: CreateEmployeeDto[], actorUser: EmployeeActor) {
     const results = {
       total: employees.length,
       created: 0,
       failed: 0,
       invitationsPending: 0,
-      errors: [] as any[],
+      errors: [] as { row: number; message: string }[],
     };
 
     for (let i = 0; i < employees.length; i++) {
@@ -247,12 +276,11 @@ export class EmployeesService {
         const created = await this.create(tenantId, row, actorUser);
         results.created++;
         if (created.activationInvitation === 'RETRY_REQUIRED') results.invitationsPending++;
-      } catch (err: any) {
+      } catch (err: unknown) {
         results.failed++;
         results.errors.push({
           row: i + 1,
-          email: row.email,
-          message: err.message || 'Validation error',
+          message: safeEmployeeImportMessage(err),
         });
       }
     }
@@ -260,14 +288,15 @@ export class EmployeesService {
     return results;
   }
 
-  private async validateReferences(tenantId: string, dto: Partial<CreateEmployeeDto>) {
-    if (!tenantId) throw new ForbiddenException('Tenant context required');
+  private async validateReferences(tenantId: string, dto: { departmentId?: string; designationId?: string; managerId?: string | null }, db: Prisma.TransactionClient = this.prisma) {
+    this.requireTenant(tenantId);
     for (const [field, find] of [
-      ['departmentId', (id: string) => this.prisma.department.findFirst({ where: { id, tenantId } })],
-      ['designationId', (id: string) => this.prisma.designation.findFirst({ where: { id, tenantId } })],
-      ['managerId', (id: string) => this.prisma.employee.findFirst({ where: { id, tenantId } })],
+      ['departmentId', (id: string) => db.department.findFirst({ where: { id, tenantId } })],
+      ['designationId', (id: string) => db.designation.findFirst({ where: { id, tenantId } })],
+      ['managerId', (id: string) => db.employee.findFirst({ where: { id, tenantId } })],
     ] as const) {
       const id = dto[field];
+      if (field === 'managerId' && id === null) continue;
       if (id !== undefined && (typeof id !== 'string' || !id.trim()
         || !await find(id))) {
         throw new BadRequestException(`Invalid ${field} for this organization`);
@@ -275,9 +304,7 @@ export class EmployeesService {
     }
   }
 
-  private sanitizeEmployee(employee: any, includeSensitive = false) {
-    if (includeSensitive) return employee;
-    const { panNumber, aadharNumber, uanNumber, bankAccount, bankIfsc, ...safe } = employee;
-    return safe;
+  private requireTenant(tenantId: string) {
+    if (typeof tenantId !== 'string' || !tenantId.trim()) throw new ForbiddenException('Tenant context required');
   }
 }

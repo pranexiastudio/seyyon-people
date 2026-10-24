@@ -19,11 +19,15 @@ describe('Employee tenant references and provisioning', () => {
     };
     db.$transaction = jest.fn(async callback => callback(db));
     activation = { invite: jest.fn().mockResolvedValue({ message: 'Invitation sent' }) };
+    db.$queryRaw = jest.fn().mockResolvedValue([]);
+    db.user = { ...db.user, findFirst: jest.fn().mockResolvedValue(null) };
+    db.$transaction = jest.fn(async callback => callback(db));
     service = new EmployeesService(db, activation);
   });
   it.each(['departmentId', 'designationId', 'managerId'])('rejects cross-tenant %s on create and update', async field => {
     const model = field === 'departmentId' ? db.department : field === 'designationId' ? db.designation : db.employee;
-    model.findFirst.mockResolvedValue(null);
+    if (field === 'managerId') model.findFirst.mockImplementation(async ({ where }) => where.id === 'e' ? { id: 'e', status: 'ACTIVE' } : null);
+    else model.findFirst.mockResolvedValue(null);
     await expect(service.create('tenant-a', dto, {})).rejects.toThrow('Invalid');
     await expect(service.update('tenant-a', 'e', { [field]: dto[field] }, {})).rejects.toThrow('Invalid');
     expect(model.findFirst).toHaveBeenCalledWith({ where: { id: dto[field], tenantId: 'tenant-a' } });
@@ -52,7 +56,7 @@ describe('Employee tenant references and provisioning', () => {
 
   it('propagates account provisioning failure from the transaction before auditing success', async () => {
     db.user.create.mockRejectedValue(new Error('Account conflict'));
-    await expect(service.create('tenant-a', dto, {})).rejects.toThrow('Account conflict');
+    await expect(service.create('tenant-a', dto, {})).rejects.toThrow('Employee operation could not be completed');
     expect(db.$transaction).toHaveBeenCalledTimes(1);
     expect(db.auditLog.create).not.toHaveBeenCalled();
   });

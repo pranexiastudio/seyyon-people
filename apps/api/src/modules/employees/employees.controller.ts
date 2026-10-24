@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, ParseArrayPi
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './dto/create-employee.dto';
+import { EmployeeListQueryDto } from './dto/employee-list-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
@@ -31,7 +32,7 @@ export class EmployeesController {
   @ApiOperation({ summary: 'List employees with pagination, search, and department filters' })
   async findAll(
     @CurrentTenantId() tenantId: string,
-    @Query() query: { search?: string; departmentId?: string; status?: string; page?: number; limit?: number }
+    @Query() query: EmployeeListQueryDto
   ) {
     return this.employeesService.findAll(tenantId, query);
   }

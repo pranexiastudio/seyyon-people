@@ -53,6 +53,23 @@ describe('Authentication session lifecycle', () => {
     await service.logout(user.id);
     await expect(service.refreshTokens(tokens.refreshToken)).rejects.toThrow();
   });
+  it('cookie logout revokes only its matching session and cannot revoke a successor', async () => {
+    const first = await login();
+    const second = await service.refreshTokens(first.refreshToken);
+    await service.logoutRefreshSession(first.refreshToken);
+    expect(user.refreshTokenHash).toBe(hashRefreshToken(second.refreshToken));
+    await service.logoutRefreshSession(second.refreshToken);
+    expect(user.refreshTokenHash).toBeNull();
+  });
+  it('cookie logout verifies signatures and can revoke an expired matching refresh token', async () => {
+    const tokens = await login();
+    await service.logoutRefreshSession('invalid');
+    expect(user.refreshTokenHash).toBe(hashRefreshToken(tokens.refreshToken));
+    const expired = jwt.sign({ sub: 'u', type: 'refresh', jti: 'test' }, { secret: getJwtRefreshSecret(), expiresIn: -1 });
+    user.refreshTokenHash = hashRefreshToken(expired);
+    await service.logoutRefreshSession(expired);
+    expect(user.refreshTokenHash).toBeNull();
+  });
   it('logout racing rotation cannot restore the revoked session', async () => {
     const tokens = await login();
     prisma.user.updateMany.mockImplementationOnce(async () => { await service.logout(user.id); return { count: 0 }; });
