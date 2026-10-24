@@ -5,6 +5,7 @@ import { EmployeeStatus, Permission, UserRole } from '@seyyon/shared';
 import { useAuth } from '../context/AuthContext';
 import { createEmployeesApi, employeeReadError, employeeTenantOptions, EmployeeCreated, EmployeeListQuery, EmployeeRow } from '../services/employees-api';
 
+import { ImportEmployeesDialog } from '../components/employees/ImportEmployeesDialog';
 import { EditEmployeeDialog } from '../components/employees/EditEmployeeDialog';
 import { CreateEmployeeDialog } from '../components/employees/CreateEmployeeDialog';
 
@@ -27,6 +28,7 @@ export const EmployeesPage: React.FC = () => {
   const admin = user?.role === UserRole.COMPANY_ADMIN || user?.role === UserRole.PLATFORM_SUPER_ADMIN;
   const canCreate = admin || !!user?.permissions?.includes(Permission.EMPLOYEE_CREATE);
   const canEdit = admin || !!user?.permissions?.includes(Permission.EMPLOYEE_UPDATE);
+  const [importContext, setImportContext] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; context: string } | null>(null);
   const [updateNotice, setUpdateNotice] = useState<string | null>(null);
   const canResend = canCreate && (admin || !!user?.permissions?.includes(Permission.EMPLOYEE_UPDATE));
@@ -59,11 +61,11 @@ export const EmployeesPage: React.FC = () => {
     queryFn: ({ signal }) => api.detail(profileId!, signal), enabled: ready && !!profileId, retry: false, staleTime: 0, gcTime: 0 });
 
   useEffect(() => {
-    if (!profileId || editing) return;
+    if (!profileId || editing || importContext) return;
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setProfileId(null); };
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [profileId, editing]);
+  }, [profileId, editing, importContext]);
 
   const changeFilter = (change: Partial<EmployeeListQuery>) => setFilters(previous => ({ ...previous, ...change, page: 1 }));
   const filtered = !!filters.search || !!filters.departmentId || !!filters.status;
@@ -75,8 +77,8 @@ export const EmployeesPage: React.FC = () => {
   return <div className="space-y-6">
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
       <div className="flex flex-1 flex-wrap items-center gap-3 max-w-2xl">
-        {platform && <select aria-label="Organization" value={selectedTenant} disabled={!!creation || !!editing || organizations.isPending || organizations.isError}
-          onChange={event => { setSelectedTenant(event.target.value); resetFilters(); setProfileId(null); setCreation(null); setReceipt(null); setEditing(null); setUpdateNotice(null); }} className={selectClass}>
+        {platform && <select aria-label="Organization" value={selectedTenant} disabled={!!creation || !!editing || !!importContext || organizations.isPending || organizations.isError}
+          onChange={event => { setSelectedTenant(event.target.value); resetFilters(); setProfileId(null); setCreation(null); setReceipt(null); setEditing(null); setUpdateNotice(null); setImportContext(null); }} className={selectClass}>
           <option value="">Select organization</option>
           {organizations.data?.map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
         </select>}
@@ -96,11 +98,14 @@ export const EmployeesPage: React.FC = () => {
         </select>
       </div>
       <div className="flex items-center gap-2">
-        <button disabled title="Employee import is not available yet" className="flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold opacity-50 cursor-not-allowed"><Upload size={14} /><span>Import CSV</span></button>
+        <button disabled={!ready || !canCreate} onClick={() => { setProfileId(null); setImportContext(context); }} className="flex items-center gap-1.5 px-3 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"><Upload size={14} /><span>Import CSV</span></button>
         <button disabled={!ready || !canCreate} onClick={() => { setProfileId(null); setCreation({ receipt: null, context }); }} className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold shadow-md shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed"><UserPlus size={14} /><span>Add Employee</span></button>
       </div>
     </div>
 
+    {importContext === context && ready && canCreate && <ImportEmployeesDialog key={context} api={api} scope={scope} organizationName={(platform ? organizations.data?.find(tenant => tenant.id === tenantId)?.name : user?.tenant?.name) || 'Current organization'}
+      onClose={() => setImportContext(null)} onCompleted={result => { if (result.created > 0) { void queryClient.invalidateQueries({ queryKey: ['employee-directory', ...scope] }); void queryClient.invalidateQueries({ queryKey: ['employee-departments', ...scope] }); } }}
+      onUncertain={() => { void queryClient.invalidateQueries({ queryKey: ['employee-directory', ...scope] }); }} />}
     {updateNotice === context && <p role="status" className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800">Employee updated successfully.</p>}
     {editing && editing.context === context && ready && canEdit && <EditEmployeeDialog key={`${context}:${editing.id}`} api={api} scope={scope} employeeId={editing.id}
       onClose={() => { setEditing(null); void queryClient.invalidateQueries({ queryKey: ['employee-profile', ...scope] }); void queryClient.invalidateQueries({ queryKey: ['employee-directory', ...scope] }); }}

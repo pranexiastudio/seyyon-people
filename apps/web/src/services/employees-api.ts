@@ -51,6 +51,11 @@ export const employeeCreateSchema = z.object({
 const creationSchema = z.object({ id: z.string().min(1), employeeCode: z.string(), firstName: z.string(), lastName: z.string(),
   email: z.string(), activationInvitation: z.enum(['SENT', 'RETRY_REQUIRED']) });
 export type EmployeeCreateInput = z.input<typeof employeeCreateSchema>;
+const importResultSchema = z.object({ total: z.number().int().nonnegative(), created: z.number().int().nonnegative(), failed: z.number().int().nonnegative(),
+  invitationsPending: z.number().int().nonnegative(), errors: z.array(z.object({ row: z.number().int().min(1), message: z.string() })) });
+export type EmployeeImportResult = z.infer<typeof importResultSchema>;
+const safeImportMessages = ['Employee email or code conflicts with an existing record', 'Invalid employee data or organization relationships',
+  'Employee operation not permitted or organization seat limit reached', 'Employee or organization not found', 'Employee could not be imported'];
 export type EmployeeCreated = z.infer<typeof creationSchema>;
 export type DesignationOption = z.infer<typeof designationSchema>[number];
 
@@ -89,14 +94,26 @@ export function createEmployeesApi(request: AuthSession['request'], tenantId?: s
         body: JSON.stringify(employeeUpdateSchema.parse(input)),
       }));
     },
+    async importEmployees(rows: EmployeeCreateInput[]): Promise<EmployeeImportResult> {
+      if (!rows.length || rows.length > 100) throw new Error('Import requires 1 to 100 rows.');
+      const payload = rows.map(row => employeeCreateSchema.parse(row));
+      if (new Blob([JSON.stringify(payload)]).size > 65536) throw new Error('Import payload is too large.');
+      const result = importResultSchema.parse(await post('/employees/bulk-import', payload));
+      const indices = new Set(result.errors.map(error => error.row));
+      if (result.total !== rows.length || result.created + result.failed !== result.total || result.failed !== result.errors.length
+        || indices.size !== result.errors.length || result.errors.some(error => error.row > result.total) || result.invitationsPending > result.created) {
+        throw new Error('Import result could not be verified.');
+      }
+      return { ...result, errors: result.errors.map(error => ({ row: error.row, message: safeImportMessages.includes(error.message) ? error.message : 'Employee could not be imported' })) };
+    },
     async create(input: EmployeeCreateInput): Promise<EmployeeCreated> {
       return creationSchema.parse(await post('/employees', employeeCreateSchema.parse(input)));
     },
     async resendInvitation(id: string): Promise<void> {
       z.object({ message: z.string().min(1) }).parse(await post(`/employees/${encodeURIComponent(id)}/activation-invitation`, {}));
     },
-    async designations(departmentId: string, signal?: AbortSignal): Promise<DesignationOption[]> {
-      return designationSchema.parse(await get<unknown>(`/departments/designations?${new URLSearchParams({ departmentId })}`, signal));
+    async designations(departmentId?: string, signal?: AbortSignal): Promise<DesignationOption[]> {
+      return designationSchema.parse(await get<unknown>(`/departments/designations${departmentId ? '?' + new URLSearchParams({ departmentId }) : ''}`, signal));
     },
     async list(query: EmployeeListQuery, signal?: AbortSignal): Promise<EmployeeDirectory> {
       const params = new URLSearchParams({ page: String(query.page), limit: String(query.limit) });
@@ -158,4 +175,15 @@ export function employeeUpdateError(error: unknown): string {
     if (error.status === 409) return 'The employee or linked account changed or conflicts with an existing record. Reload before retrying.';
   }
   return 'The update could not be confirmed. Close and reload the employee before trying again.';
+}
+
+export function employeeImportError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 400) return 'The server rejected the import request. Check the template, required fields and batch size.';
+    if (error.status === 401) return 'Your session has ended. Sign in again and check the directory before retrying.';
+    if (error.status === 403) return 'Import is not permitted. Check your permissions and organization access.';
+    if (error.status === 413) return 'The server rejected the file size. Split the CSV into smaller batches.';
+    if (error.status === 409) return 'The import conflicts with existing records. Check the directory before retrying.';
+  }
+  return 'Import outcome is unconfirmed. Some accounts may already exist. Check the directory before retrying; do not submit this batch again automatically.';
 }

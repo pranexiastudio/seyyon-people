@@ -30,6 +30,24 @@ describe('Employee mutation privacy and safe errors', () => {
     service = new EmployeesService(db, activation);
   });
 
+  it('rejects creation using a designation in a different same-tenant department', async () => {
+    db.designation.findFirst.mockResolvedValue({ id: 'j', departmentId: 'other-department' });
+    await expect(service.create('t', dto, {})).rejects.toMatchObject({ status: 400 }); expect(db.employee.create).not.toHaveBeenCalled();
+  });
+  it('rechecks the seat allocation under a tenant lock before creating employee or user', async () => {
+    db.tenant.findUnique.mockResolvedValueOnce({ maxEmployees: 2, _count: { employees: 1 } })
+      .mockResolvedValueOnce({ maxEmployees: 2, _count: { employees: 2 } });
+    await expect(service.create('t', dto, {})).rejects.toMatchObject({ status: 403 });
+    expect(db.$queryRaw.mock.calls[0][0].join('')).toContain('FOR UPDATE'); expect(db.employee.create).not.toHaveBeenCalled(); expect(db.user.create).not.toHaveBeenCalled();
+  });
+  it('uses only safe row messages when a partial batch encounters duplicate and seat-limit failures', async () => {
+    jest.spyOn(service, 'create').mockResolvedValueOnce({ activationInvitation: 'SENT' } as any)
+      .mockRejectedValueOnce(new ConflictException('private email')).mockRejectedValueOnce(new ForbiddenException('private subscription'));
+    const result = await service.importBulk('t', [dto, dto, dto], {});
+    expect(result).toMatchObject({ total: 3, created: 1, failed: 2, invitationsPending: 0 });
+    expect(result.errors).toEqual([{ row: 2, message: employeeConflictMessage }, { row: 3, message: 'Employee operation not permitted or organization seat limit reached' }]);
+  });
+
   it.each([false, true])('allowlists create responses and requires sensitive permission (%s)', async allowed => {
     const result = await service.create('t', dto, { tenantId: 't', permissions: allowed ? [Permission.EMPLOYEE_VIEW_SENSITIVE] : [] });
     expect(result.activationInvitation).toBe('SENT'); expect(result.email).toBe(dto.email);

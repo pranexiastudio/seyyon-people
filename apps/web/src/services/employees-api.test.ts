@@ -15,6 +15,27 @@ const raw = {
 const query = { search: '', departmentId: '', status: '' as const, page: 1, limit: 20 };
 
 describe('Employees read API adapter', () => {
+  it('posts an allowlisted import array and validates partial results with scoped headers', async () => {
+    const request = vi.fn().mockResolvedValue({ total: 2, created: 1, failed: 1, invitationsPending: 1, errors: [{ row: 2, message: 'private database statement' }] });
+    const input = { firstName: 'New', lastName: 'Person', email: 'NEW@example.com', departmentId: 'd', designationId: 'j' };
+    const result = await createEmployeesApi(request, 't').importEmployees([input, { ...input, email: 'other@example.com' }]);
+    expect(request.mock.calls[0][0]).toBe('/employees/bulk-import'); expect(request.mock.calls[0][1].method).toBe('POST'); expect(request.mock.calls[0][1].headers['X-Tenant-Id']).toBe('t');
+    expect(JSON.parse(request.mock.calls[0][1].body)[0].email).toBe('new@example.com');
+    expect(result.errors).toEqual([{ row: 2, message: 'Employee could not be imported' }]); expect(JSON.stringify(result)).not.toContain('private');
+  });
+  it.each([
+    { total: 1, created: 1, failed: 1, invitationsPending: 0, errors: [{ row: 1, message: 'error' }] },
+    { total: 1, created: 0, failed: 1, invitationsPending: 0, errors: [{ row: 2, message: 'error' }] },
+    { total: 1, created: 1, failed: 0, invitationsPending: 2, errors: [] },
+    { total: 1, created: 0, failed: 1, invitationsPending: 0, errors: [] },
+  ])('rejects inconsistent import success responses %#', async response => {
+    const request = vi.fn().mockResolvedValue(response);
+    await expect(createEmployeesApi(request).importEmployees([{ firstName: 'New', lastName: 'Person', email: 'new@example.com', departmentId: 'd', designationId: 'j' }])).rejects.toThrow();
+  });
+  it('rejects empty or excessive import batches without requesting the server', async () => {
+    const request = vi.fn(); const api = createEmployeesApi(request);
+    await expect(api.importEmployees([])).rejects.toThrow(); await expect(api.importEmployees(Array(101).fill({}))).rejects.toThrow(); expect(request).not.toHaveBeenCalled();
+  });
   it('uses the supported PUT endpoint with scoped headers and strips private response fields', async () => {
     const request = vi.fn().mockResolvedValue({ ...raw, dateOfExit: null, subordinates: [] });
     await createEmployeesApi(request, 't').update('e/slash', { firstName: ' Changed ', managerId: null, status: EmployeeStatus.RESIGNED });

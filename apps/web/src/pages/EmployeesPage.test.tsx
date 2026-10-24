@@ -36,6 +36,26 @@ beforeEach(() => {
 afterEach(() => { clients.forEach(client => client.clear()); vi.useRealTimers(); });
 
 describe('Real read-only Employees directory', () => {
+  it('imports through review and refreshes the real directory only after server confirmation', async () => {
+    let imported = false;
+    auth.request.mockImplementation(async (path: string, init: RequestInit) => {
+      if (path === '/departments') return [{ id: departmentId, name: 'Research', code: 'RND' }];
+      if (path === '/departments/designations') return [{ id: 'j-1', title: 'Engineer', code: 'ENG', departmentId }];
+      if (path.startsWith('/employees?')) return listResponse(imported ? [rawEmployee({ firstName: 'Imported' })] : []);
+      if (path === '/employees/bulk-import' && init.method === 'POST') { imported = true; return { total: 1, created: 1, failed: 0, invitationsPending: 1, errors: [] }; }
+      throw new Error('Unexpected endpoint');
+    });
+    setup(); await screen.findByText('No employees yet.'); fireEvent.click(screen.getByRole('button', { name: 'Import CSV' }));
+    const csv = `firstName,lastName,email,departmentId,designationId\nImported,Person,imported@example.com,${departmentId},j-1`;
+    fireEvent.change(screen.getByLabelText('Employee CSV'), { target: { files: [new File([csv], 'employees.csv')] } });
+    await screen.findByText('Ready for review'); const before = listCalls().length;
+    fireEvent.click(screen.getByRole('button', { name: 'Review import' })); expect(imported).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm import' })); await screen.findByText('Server confirmed: 1 imported, 0 rejected, 1 processed.');
+    expect(await within(screen.getByRole('table', { name: 'Employee directory' })).findByText('Imported Person')).toBeInTheDocument(); expect(listCalls().length).toBeGreaterThan(before);
+  });
+  it('restricts importing when the user lacks employee creation permission', async () => {
+    auth.user.role = 'EMPLOYEE'; setup(); await screen.findByText('API Person'); expect(screen.getByRole('button', { name: 'Import CSV' })).toBeDisabled();
+  });
   it('opens editing from real details and refreshes both directory and profile after saving', async () => {
     let firstName = 'Existing';
     auth.request.mockImplementation(async (path: string, init: RequestInit) => {
@@ -114,7 +134,7 @@ describe('Real read-only Employees directory', () => {
     pending.resolve(listResponse());
     expect(await screen.findByText('API Person')).toBeInTheDocument(); expect(screen.getByText('Research Engineer')).toBeInTheDocument();
     expect(within(screen.getByRole('table')).getByText('PROBATION')).toBeInTheDocument(); expect(screen.getByText('1 Members')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add Employee' })).toBeEnabled(); expect(screen.getByRole('button', { name: 'Import CSV' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add Employee' })).toBeEnabled(); expect(screen.getByRole('button', { name: 'Import CSV' })).toBeEnabled();
     expect(screen.queryByText(/Alex Morgan|150 Seats|Acme Technologies/)).not.toBeInTheDocument();
     expect(auth.request.mock.calls.every(call => call[1].method === 'GET')).toBe(true);
   });

@@ -8,6 +8,7 @@ import { randomBytes } from 'crypto';
 import { ActivationService } from '../auth/activation.service';
 import { EmployeeListQueryDto } from './dto/employee-list-query.dto';
 import { canViewEmployeePrivate, EmployeeActor, employeeDetailsResponse, employeeDetailsSelect, employeeDirectoryResponse, employeeDirectorySelect } from './employee-response';
+import { EmployeeImportLimitPipe } from './employee-import-limit.pipe';
 import { employeeConflictMessage, safeEmployeeError, safeEmployeeImportMessage } from './employee-errors';
 
 @Injectable()
@@ -111,16 +112,16 @@ export class EmployeesService {
       throw new ConflictException(employeeConflictMessage);
     }
 
-    // Auto-generate employee code if missing
-    let code = dto.employeeCode;
-    if (!code) {
-      const count = tenant._count.employees + 1;
-      code = `EMP-${count.toString().padStart(3, '0')}`;
-    }
-
     // Provision the employee and login atomically; failed account creation must
     // not leave an orphan employee record.
     const employee = await this.prisma.$transaction(async tx => {
+      // All employee creation paths share this lock: seat allocation is checked
+      // inside the write transaction, including concurrent imports and creates.
+      await tx.$queryRaw`SELECT "id" FROM "Tenant" WHERE "id" = ${tenantId} FOR UPDATE`;
+      const allocation = await tx.tenant.findUnique({ where: { id: tenantId }, select: { maxEmployees: true, _count: { select: { employees: true } } } });
+      if (!allocation) throw new NotFoundException('Tenant organization not found');
+      if (allocation._count.employees >= allocation.maxEmployees) throw new ForbiddenException('Organization seat limit reached');
+      const code = dto.employeeCode || `EMP-${(allocation._count.employees + 1).toString().padStart(3, '0')}`;
       const employee = await tx.employee.create({
         data: {
           tenantId,
@@ -262,6 +263,8 @@ export class EmployeesService {
   }
 
   async importBulk(tenantId: string, employees: CreateEmployeeDto[], actorUser: EmployeeActor) {
+    this.requireTenant(tenantId);
+    new EmployeeImportLimitPipe().transform(employees);
     const results = {
       total: employees.length,
       created: 0,
@@ -290,6 +293,12 @@ export class EmployeesService {
 
   private async validateReferences(tenantId: string, dto: { departmentId?: string; designationId?: string; managerId?: string | null }, db: Prisma.TransactionClient = this.prisma) {
     this.requireTenant(tenantId);
+    if (dto.departmentId !== undefined && dto.designationId !== undefined) {
+      const designation = await db.designation.findFirst({ where: { id: dto.designationId, tenantId } });
+      if (!designation || (designation.departmentId != null && designation.departmentId !== dto.departmentId)) {
+        throw new BadRequestException('Invalid designationId for this organization department');
+      }
+    }
     for (const [field, find] of [
       ['departmentId', (id: string) => db.department.findFirst({ where: { id, tenantId } })],
       ['designationId', (id: string) => db.designation.findFirst({ where: { id, tenantId } })],

@@ -10,6 +10,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CurrentTenantId } from '../../common/decorators/current-tenant.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { Permission } from '@seyyon/shared';
+import { EmployeeImportLimitPipe } from './employee-import-limit.pipe';
 import { ActivationRateGuard } from '../auth/activation-rate.guard';
 
 @ApiTags('Employees')
@@ -76,7 +77,7 @@ export class EmployeesController {
   @ApiOperation({ summary: 'Bulk import employees from validated CSV/JSON array' })
   async bulkImport(
     @CurrentTenantId() tenantId: string,
-    @Body(new ParseArrayPipe({ items: CreateEmployeeDto, whitelist: true, forbidNonWhitelisted: true })) employees: CreateEmployeeDto[],
+    @Body(new EmployeeImportLimitPipe(), new ParseArrayPipe({ items: CreateEmployeeDto, whitelist: true, forbidNonWhitelisted: true, validationError: { target: false, value: false } })) employees: CreateEmployeeDto[],
     @CurrentUser() user: any
   ) {
     return this.employeesService.importBulk(tenantId, employees, user);
