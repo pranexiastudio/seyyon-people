@@ -1,0 +1,380 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../apps/api/src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum MembershipStatus {
+  ACTIVE
+  DISABLED
+}
+
+model Tenant {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String       @db.VarChar(200)
+  slug        String       @unique @db.VarChar(100)
+  status      TenantStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  legalName    String? @map("legal_name") @db.VarChar(200)
+  companyEmail String? @unique @map("company_email") @db.VarChar(320)
+  contactNumber String? @map("contact_number") @db.VarChar(40)
+  industry     String? @db.VarChar(120)
+  companySize  String? @map("company_size") @db.VarChar(20)
+  website      String? @db.VarChar(2048)
+  address      String? @db.VarChar(500)
+  country      String? @db.VarChar(120)
+  state        String? @db.VarChar(120)
+  city         String? @db.VarChar(120)
+  postalCode   String? @map("postal_code") @db.VarChar(24)
+  logo         String? @db.Text
+  settings     Json    @default("{}")
+  memberships Membership[]
+  roles       Role[]
+  audits      AuditLog[]
+  branches Branch[]
+  departments Department[]
+  designations Designation[]
+  jobGrades JobGrade[]
+  employmentTypes EmploymentType[]
+  workLocations WorkLocation[]
+  employees Employee[]
+
+  @@map("tenants")
+}
+
+model User {
+  id             String       @id @default(uuid()) @db.Uuid
+  email          String       @unique @db.VarChar(320)
+  passwordHash   String       @map("password_hash")
+  passwordConfigured Boolean @default(true) @map("password_configured")
+  disabled       Boolean      @default(false)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  memberships    Membership[]
+  platformAdmin  PlatformAdmin?
+  employeeLoginId String? @unique @map("employee_login_id") @db.VarChar(100)
+  loginFailures Int @default(0) @map("login_failures")
+  lockedUntil DateTime? @map("locked_until") @db.Timestamptz(3)
+  sessions AuthSession[]
+  resetTokens PasswordReset[]
+
+  @@map("users")
+}
+
+model PlatformAdmin {
+  userId String @id @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("platform_admins")
+}
+
+model Membership {
+  id        String           @id @default(uuid()) @db.Uuid
+  tenantId  String           @map("tenant_id") @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  status    MembershipStatus @default(ACTIVE)
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  roles     MembershipRole[]
+  employee  Employee?
+
+  @@unique([tenantId, userId])
+  @@unique([tenantId, id])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @map("tenant_id") @db.Uuid
+  name        String           @db.VarChar(100)
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  members     MembershipRole[]
+  permissions RolePermission[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id])
+  @@map("roles")
+}
+
+model Permission {
+  id    String           @id @default(uuid()) @db.Uuid
+  key   String           @unique @db.VarChar(150)
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model MembershipRole {
+  tenantId     String     @map("tenant_id") @db.Uuid
+  membershipId String     @map("membership_id") @db.Uuid
+  roleId       String     @map("role_id") @db.Uuid
+  membership   Membership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Cascade)
+  role         Role       @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, membershipId, roleId])
+  @@index([tenantId, roleId])
+  @@map("membership_roles")
+}
+
+model RolePermission {
+  tenantId     String     @map("tenant_id") @db.Uuid
+  roleId       String     @map("role_id") @db.Uuid
+  permissionId String     @map("permission_id") @db.Uuid
+  role         Role       @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  action    String   @db.VarChar(150)
+  entityId  String?  @map("entity_id")
+  requestId String   @map("request_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}
+
+model PlatformAuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  action    String   @db.VarChar(150)
+  targetId  String?  @map("target_id") @db.Uuid
+  requestId String   @map("request_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@index([targetId, createdAt(sort: Desc)], map: "platform_audit_target_timeline_idx")
+  @@map("platform_audit_logs")
+}
+
+model AuthSession {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  tenantId String? @map("tenant_id") @db.Uuid
+  platform Boolean @default(false)
+  remember Boolean @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokens RefreshToken[]
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("auth_sessions")
+}
+
+model RefreshToken {
+  hash String @id @db.VarChar(64)
+  sessionId String @map("session_id") @db.Uuid
+  usedAt DateTime? @map("used_at") @db.Timestamptz(3)
+  session AuthSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("refresh_tokens")
+}
+
+model PasswordReset {
+  hash String @id @db.VarChar(64)
+  userId String @map("user_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  usedAt DateTime? @map("used_at") @db.Timestamptz(3)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_resets")
+}
+
+model AuthEvent {
+  id String @id @default(uuid()) @db.Uuid
+  userId String? @map("user_id") @db.Uuid
+  action String @db.VarChar(100)
+  requestId String @map("request_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([userId, createdAt])
+  @@map("auth_events")
+}
+
+enum WorkLocationKind {
+  OFFICE
+  REMOTE
+  HYBRID
+  CUSTOM
+}
+
+model Branch {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  name String @db.VarChar(200)
+  code String @db.VarChar(40)
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  address String @db.VarChar(500)
+  contactEmail String? @map("contact_email") @db.VarChar(320)
+  contactPhone String? @map("contact_phone") @db.VarChar(40)
+  isPrimary Boolean @default(false) @map("is_primary")
+  employees Employee[]
+  workLocations WorkLocation[]
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("branches")
+}
+
+model Department {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  name String @db.VarChar(200)
+  code String @db.VarChar(40)
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  description String? @db.VarChar(1000)
+  parentId String? @map("parent_id") @db.Uuid
+  headId String? @map("head_id") @db.Uuid
+  parent Department? @relation("DepartmentTree", fields: [tenantId, parentId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  children Department[] @relation("DepartmentTree")
+  head Employee? @relation("DepartmentHead", fields: [tenantId, id, headId], references: [tenantId, departmentId, id], onDelete: Restrict, onUpdate: Restrict)
+  designations Designation[]
+  employees Employee[] @relation("EmployeeDepartment")
+  @@unique([tenantId, id, headId])
+  @@index([tenantId, parentId])
+  @@index([tenantId, headId])
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("departments")
+}
+
+model Designation {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  name String @db.VarChar(200)
+  code String @db.VarChar(40)
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  departmentId String @map("department_id") @db.Uuid
+  jobLevel Int @map("job_level")
+  department Department @relation(fields: [tenantId, departmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  employees Employee[]
+  @@unique([tenantId, departmentId, id])
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("designations")
+}
+
+model JobGrade {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  name String @db.VarChar(200)
+  code String @db.VarChar(40)
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  description String? @db.VarChar(1000)
+  rank Int
+  employees Employee[]
+  @@unique([tenantId, rank])
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("job_grades")
+}
+
+model EmploymentType {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  name String @db.VarChar(200)
+  code String @db.VarChar(40)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  employees Employee[]
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("employment_types")
+}
+
+model WorkLocation {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  name String @db.VarChar(200)
+  code String @db.VarChar(40)
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  kind WorkLocationKind
+  branchId String? @map("branch_id") @db.Uuid
+  address String? @db.VarChar(500)
+  branch Branch? @relation(fields: [tenantId, branchId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  employees Employee[]
+  @@index([tenantId, branchId])
+  @@unique([tenantId, id])
+  @@unique([tenantId, code])
+  @@map("work_locations")
+}
+
+model Employee {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  employeeNumber String @map("employee_number") @db.VarChar(40)
+  displayName String @map("display_name") @db.VarChar(200)
+  membershipId String? @map("membership_id") @db.Uuid
+  branchId String? @map("branch_id") @db.Uuid
+  departmentId String? @map("department_id") @db.Uuid
+  designationId String? @map("designation_id") @db.Uuid
+  jobGradeId String? @map("job_grade_id") @db.Uuid
+  employmentTypeId String? @map("employment_type_id") @db.Uuid
+  workLocationId String? @map("work_location_id") @db.Uuid
+  managerId String? @map("manager_id") @db.Uuid
+  membership Membership? @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  branch Branch? @relation(fields: [tenantId, branchId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  department Department? @relation("EmployeeDepartment", fields: [tenantId, departmentId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  headedDepartment Department? @relation("DepartmentHead")
+  designation Designation? @relation(fields: [tenantId, departmentId, designationId], references: [tenantId, departmentId, id], onDelete: Restrict, onUpdate: Restrict)
+  jobGrade JobGrade? @relation(fields: [tenantId, jobGradeId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  employmentType EmploymentType? @relation(fields: [tenantId, employmentTypeId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  workLocation WorkLocation? @relation(fields: [tenantId, workLocationId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  manager Employee? @relation("EmployeeManager", fields: [tenantId, managerId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  directReports Employee[] @relation("EmployeeManager")
+  @@unique([tenantId, employeeNumber])
+  @@unique([tenantId, membershipId])
+  @@unique([tenantId, departmentId, id])
+  @@index([tenantId, displayName])
+  @@index([tenantId, branchId])
+  @@index([tenantId, managerId])
+  @@index([tenantId, designationId])
+  @@index([tenantId, jobGradeId])
+  @@index([tenantId, employmentTypeId])
+  @@index([tenantId, workLocationId])
+  @@unique([tenantId, id])
+  @@map("employees")
+}
+

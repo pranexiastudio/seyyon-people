@@ -1,0 +1,43 @@
+{
+  "name": "seyyon-people",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.12 <23",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "setup:env": "tsx scripts/setup-env.ts",
+    "auth:bootstrap": "npm run build -w @seyyon/shared && tsx --env-file=.env scripts/bootstrap-admin.ts",
+    "dev": "npm run build -w @seyyon/shared && concurrently -k -n api,web \"npm run dev -w @seyyon/api\" \"npm run dev -w @seyyon/web\"",
+    "dev:web": "npm run build -w @seyyon/shared && npm run dev -w @seyyon/web",
+    "dev:api": "npm run build -w @seyyon/shared && npm run dev -w @seyyon/api",
+    "build": "npm run build -w @seyyon/shared && npm run build -w @seyyon/api && npm run build -w @seyyon/web",
+    "typecheck": "npm run build -w @seyyon/shared && npm run typecheck --workspaces --if-present",
+    "test": "npm run build -w @seyyon/shared && npm run test -w @seyyon/api",
+    "db:generate": "prisma generate",
+    "db:validate": "prisma validate",
+    "db:migrate": "prisma migrate deploy",
+    "db:dev": "prisma migrate dev",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.0.0",
+    "@prisma/adapter-pg": "^7.0.0",
+    "dotenv": "^17.0.0",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "prisma": "^7.0.0",
+    "typescript": "~5.9.3",
+    "tsx": "^4.20.0",
+    "concurrently": "^9.2.0",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.15.0"
+  }
+}

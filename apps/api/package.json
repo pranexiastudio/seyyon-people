@@ -1,0 +1,31 @@
+{
+  "name": "@seyyon/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=../../.env src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file=../../.env dist/server.js",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "test": "tsx --env-file=../../.env --test src/modules/health/health.test.ts src/middleware/auth.test.ts",
+    "test:db": "tsx --env-file=../../.env --test test/rls.integration.ts test/auth.integration.ts test/tenants.integration.ts",
+    "test:organization": "tsx --env-file=../../.env --test test/organization.integration.ts"
+  },
+  "dependencies": {
+    "@seyyon/shared": "0.1.0",
+    "express": "^5.1.0",
+    "cors": "^2.8.5",
+    "helmet": "^8.1.0",
+    "express-rate-limit": "^8.0.0",
+    "jose": "^6.0.0",
+    "pino": "^10.0.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/cors": "^2.8.19",
+    "supertest": "^7.1.0",
+    "@types/supertest": "^6.0.0"
+  }
+}
