@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import request from "supertest";
 import { app } from "../src/app.js";
@@ -38,6 +39,8 @@ test("organization catalog lifecycle, permissions and tenant isolation", async (
     let operations: string;
     let otherDepartment: string;
     let designation: string;
+    let junior: string;
+    let office: string;
 
     await suite.test("requires workspace permission, rejects tenant input and guards stale tabs", async () => {
       expect(await request(app).get(root + "/branches"), 401);
@@ -99,7 +102,7 @@ test("organization catalog lifecycle, permissions and tenant isolation", async (
     });
     await suite.test("grades are rank-ordered and default employment types are read-only", async () => {
       const senior = expect(await own.post("/job-grades", { name: "Senior", code: "SEN", rank: 20 }), 201).id;
-      const junior = expect(await own.post("/job-grades", { name: "Junior", code: "JUN", rank: 10 }), 201).id;
+      junior = expect(await own.post("/job-grades", { name: "Junior", code: "JUN", rank: 10 }), 201).id;
       expect(await own.patch("/job-grades/" + senior, { rank: 10 }), 409, "DUPLICATE_GRADE_RANK");
       assert.equal(expect(await own.get("/job-grades"), 200).items[0].id, junior);
       expect(await own.patch("/job-grades/" + junior, { description: "Entry grade", active: false }), 200);
@@ -113,7 +116,7 @@ test("organization catalog lifecycle, permissions and tenant isolation", async (
     await suite.test("work locations validate branch scope and audit successful mutations", async () => {
       const payload = { name: "Studio office", code: "OFFICE", branchId: hq, kind: "OFFICE" };
       expect(await own.post("/work-locations", { ...payload, branchId: otherBranch }), 404);
-      const office = expect(await own.post("/work-locations", payload), 201).id;
+      office = expect(await own.post("/work-locations", payload), 201).id;
       expect(await own.post("/work-locations", { name: "Flexible", code: "FLEX", kind: "HYBRID" }), 201);
       assert.equal(expect(await own.get("/work-locations?kind=OFFICE"), 200).items[0].branch.code, "HQ");
       expect(await own.patch("/branches/" + hq, { active: false }), 409, "ORGANIZATION_RECORD_IN_USE");
@@ -128,6 +131,82 @@ test("organization catalog lifecycle, permissions and tenant isolation", async (
       }
       assert.equal(audit.filter((row) => row.entity_id === hq && row.action === "BRANCH_UPDATED").length, 1);
       assert.equal((await owner.query("SELECT count(*)::int AS count FROM audit_logs WHERE tenant_id=$1 AND entity_id=$2", [tenantB, hq])).rows[0].count, 0);
+    });
+
+    await suite.test("all catalogs scope lists and record IDs, enforce reader permissions and validate pagination", async () => {
+      const employment = expect(await own.get("/employment-types?search=PERMANENT"), 200).items[0];
+      const catalogs = [
+        { path: "branches", id: hq, search: "HQ", saved: { contactPhone: "+91 555 0123", active: false } },
+        { path: "departments", id: engineering, search: "ENG", saved: { description: "Product engineering", active: true } },
+        { path: "designations", id: designation, search: "DEV", saved: { jobLevel: 3, active: true } },
+        { path: "job-grades", id: junior, search: "JUN", saved: { description: "Entry grade", active: false } },
+        { path: "employment-types", id: employment.id, search: "PERMANENT", saved: { code: "PERMANENT" } },
+        { path: "work-locations", id: office, search: "OFFICE", saved: { kind: "REMOTE", branchId: null, active: true } },
+      ];
+      for (const { path, id, search, saved } of catalogs) {
+        const readerList = expect(await access(reader!).get("/" + path + "?search=" + search + "&limit=1&page=1"), 200);
+        assert.equal(readerList.items[0].id, id, path);
+        assert.equal(readerList.page, 1, path);
+        assert.equal(readerList.limit, 1, path);
+        const detail = expect(await own.get("/" + path + "/" + id), 200);
+        for (const [field, value] of Object.entries(saved)) assert.equal(detail[field], value, path + "." + field);
+        expect(await foreign.get("/" + path + "/" + id), 404);
+        expect(await foreign.patch("/" + path + "/" + id, { name: "Foreign change" }), 404);
+        expect(await access(reader!).patch("/" + path + "/" + id, { name: "Reader change" }), path === "employment-types" ? 404 : 403);
+      }
+    });
+
+    await suite.test("catalog validation and dependencies preserve existing records", async () => {
+      expect(await own.post("/branches", { ...branch, code: "BAD ADDRESS", address: "" }), 400);
+      expect(await own.post("/departments", { ...department, code: "ENG" }), 409, "DUPLICATE_ORGANIZATION_CODE");
+      expect(await own.post("/designations", { name: "Duplicate", code: "dev", departmentId: engineering, jobLevel: 1 }), 409, "DUPLICATE_ORGANIZATION_CODE");
+      expect(await own.post("/job-grades", { name: "Duplicate rank", code: "EXTRA", rank: 10 }), 409, "DUPLICATE_GRADE_RANK");
+      expect(await own.post("/job-grades", { name: "Invalid rank", code: "EXTRA", rank: 0 }), 400);
+      expect(await own.post("/work-locations", { name: "Invalid type", code: "EXTRA", kind: "UNKNOWN" }), 400);
+      expect(await own.patch("/work-locations/" + office, { branchId: otherBranch }), 404);
+      expect(await own.patch("/designations/" + designation, { departmentId: otherDepartment }), 404);
+
+      const employee = randomUUID();
+      await owner.query("UPDATE departments SET parent_id=$1 WHERE id=$2 AND tenant_id=$3", [engineering, operations, tenantA]);
+      expect(await own.patch("/departments/" + operations, { active: true }), 200);
+      expect(await own.patch("/departments/" + engineering, { active: false }), 409, "ORGANIZATION_RECORD_IN_USE");
+      expect(await own.patch("/job-grades/" + junior, { active: true }), 200);
+      await owner.query(
+        "INSERT INTO employees (id,tenant_id,employee_number,display_name,department_id,designation_id,job_grade_id,work_location_id,updated_at) VALUES ($1,$2,'QA01','Synthetic dependency',$3,$4,$5,$6,now())",
+        [employee, tenantA, engineering, designation, junior, office],
+      );
+      for (const [path, table, id] of [
+        ["designations", "designations", designation], ["job-grades", "job_grades", junior], ["work-locations", "work_locations", office],
+      ]) {
+        expect(await own.patch("/" + path + "/" + id, { active: false }), 409, "ORGANIZATION_RECORD_IN_USE");
+        assert.equal((await owner.query("SELECT active FROM " + table + " WHERE id=$1 AND tenant_id=$2", [id, tenantA])).rows[0].active, true);
+      }
+      await assert.rejects(owner.query("UPDATE employees SET branch_id=$1 WHERE id=$2 AND tenant_id=$3", [otherBranch, employee, tenantA]), { code: "23503" });
+      await assert.rejects(owner.query("UPDATE departments SET parent_id=$1 WHERE id=$2 AND tenant_id=$3", [otherDepartment, operations, tenantA]), { code: "23503" });
+      const stored = await owner.query("SELECT branch_id, department_id, designation_id FROM employees WHERE id=$1 AND tenant_id=$2", [employee, tenantA]);
+      assert.deepEqual(stored.rows[0], { branch_id: null, department_id: engineering, designation_id: designation });
+    });
+
+    await suite.test("runtime RLS hides organization rows outside the transaction tenant", async () => {
+      const tables = ["branches", "departments", "designations", "job_grades", "employment_types", "work_locations", "employees"];
+      const role = await database.$queryRaw<{ role: string; bypass: boolean }[]>`
+        SELECT current_user AS role, (rolsuper OR rolbypassrls) AS bypass FROM pg_roles WHERE rolname = current_user
+      `;
+      assert.deepEqual(role, [{ role: "seyyon_app", bypass: false }]);
+      await database.$transaction(async (transaction) => {
+        for (const table of tables) {
+          assert.equal((await transaction.$queryRawUnsafe("SELECT id FROM " + table) as unknown[]).length, 0, table);
+        }
+        await transaction.$executeRaw`SELECT set_config('app.tenant_id', ${tenantA}, true)`;
+        for (const table of tables) {
+          const rows = await transaction.$queryRawUnsafe<{ tenant_id: string }[]>("SELECT tenant_id FROM " + table);
+          assert.ok(rows.length > 0, table);
+          assert.ok(rows.every(({ tenant_id }) => tenant_id === tenantA), table);
+        }
+        const changed = await transaction.$executeRaw`UPDATE branches SET name='Should stay unchanged' WHERE id=${otherBranch}::uuid`;
+        assert.equal(changed, 0);
+      });
+      assert.deepEqual(await database.$queryRaw`SELECT id FROM branches`, []);
     });
   } finally {
     await Promise.all([owner.end(), database.$disconnect()]);

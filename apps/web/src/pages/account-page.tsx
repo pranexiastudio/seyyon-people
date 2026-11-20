@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ShieldCheck, Users, LogOut, Monitor } from "lucide-react";
+import { ArrowLeft, ShieldCheck, Users, LogOut, Monitor } from "lucide-react";
 import { Link } from "react-router";
 import { companyAdminRole, organizationPermissions } from "@seyyon/shared";
 import { z } from "zod";
@@ -13,6 +13,8 @@ const sessionsSchema = z.array(z.object({ id: z.uuid(), createdAt: z.string(), e
 export function AccountPage() {
   const auth = useAuth();
   const profile = auth.profile!;
+  const companyHome = "/app/company";
+  const isCompanyAdmin = !profile.platform && profile.roles.includes(companyAdminRole);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [accountId, setAccountId] = useState("");
@@ -27,6 +29,9 @@ export function AccountPage() {
   return <div className="min-h-screen bg-background">
     <header className="border-b border-border bg-card"><div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-5"><span className="flex items-center gap-2 font-semibold text-primary"><Users />Seyyon People</span><Button variant="outline" disabled={busy} onClick={() => void action(() => auth.logout())}><LogOut size={16} />Sign out</Button></div></header>
     <main className="mx-auto max-w-5xl space-y-6 px-6 py-10">
+      {isCompanyAdmin && <Button variant="outline" asChild>
+        <Link to={companyHome}><ArrowLeft size={16} aria-hidden="true" />Go Home</Link>
+      </Button>}
       <p className="text-xs font-semibold uppercase tracking-widest text-primary">{profile.platform ? "Platform administration" : profile.companyName}</p>
       <h1 className="text-3xl font-semibold tracking-tight">Your account & security</h1>
       <p className="text-sm text-muted-foreground">Signed in as {profile.user.email}</p>
@@ -40,7 +45,7 @@ export function AccountPage() {
         </select>
         <p className="mt-4 text-xs text-muted-foreground" role="status">{scope.isPending ? "Verifying access…" : scope.isError ? scope.error.message : "Access verified by the server."}</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          {(profile.platform || profile.roles.includes(companyAdminRole)) && <Button variant="outline" asChild><Link to={profile.platform ? "/platform" : "/app/company"}>{profile.platform ? "Platform dashboard" : "Manage company"}</Link></Button>}
+          {(profile.platform || isCompanyAdmin) && <Button variant="outline" asChild><Link to={profile.platform ? "/platform" : companyHome}>{profile.platform ? "Platform dashboard" : "Manage company"}</Link></Button>}
           {!profile.platform && profile.permissions.includes(organizationPermissions.read) &&
             <Button variant="outline" asChild><Link to="/app/organization">Organization</Link></Button>}
         </div>
