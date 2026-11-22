@@ -20,6 +20,8 @@
     "build": "npm run build -w @seyyon/shared && npm run build -w @seyyon/api && npm run build -w @seyyon/web",
     "typecheck": "npm run build -w @seyyon/shared && npm run typecheck --workspaces --if-present",
     "test": "npm run build -w @seyyon/shared && npm run test -w @seyyon/api",
+    "test:module3:api": "npm run build -w @seyyon/shared && npm run test:organization -w @seyyon/api && npm run test:employees -w @seyyon/api",
+    "test:module3:browser": "npm run test:e2e -w @seyyon/web -- e2e/organization.spec.ts e2e/employees.spec.ts",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:migrate": "prisma migrate deploy",

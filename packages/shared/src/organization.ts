@@ -21,6 +21,7 @@ export const branchSchema = z.strictObject({
   isPrimary: z.boolean().optional(),
 });
 export const departmentSchema = z.strictObject({ name, code, description });
+export const departmentHeadSchema = z.strictObject({ headId: z.uuid().nullable() });
 export const designationSchema = z.strictObject({
   name, code, departmentId: z.uuid("Choose a department."), jobLevel: positiveInt,
 });
@@ -49,6 +50,7 @@ export type CatalogRow = {
   contactPhone?: string | null;
   isPrimary?: boolean;
   description?: string | null;
+  head?: DepartmentHead | null;
   departmentId?: string;
   department?: { id: string; name: string; code: string };
   jobLevel?: number;
@@ -58,3 +60,4 @@ export type CatalogRow = {
   branch?: { id: string; name: string; code: string } | null;
 };
 export type CatalogPage = { items: CatalogRow[]; total: number; page: number; limit: number };
+export type DepartmentHead = { id: string; displayName: string; employeeNumber: string };

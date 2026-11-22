@@ -10,7 +10,7 @@ export default defineConfig({
     command: "npm run dev",
     cwd: fileURLToPath(new URL("../..", import.meta.url)),
     url: (process.env.WEB_ORIGIN || "http://localhost:5173") + "/login",
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.SEYYON_ORG_TEST_DB,
     timeout: 60_000,
   },
 });

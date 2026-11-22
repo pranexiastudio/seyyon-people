@@ -5,6 +5,7 @@ import { authenticate, requirePlatformAdmin } from "../../middleware/auth.js";
 import { HttpError } from "../../middleware/errors.js";
 import * as tenants from "./service.js";
 import { organizationRouter } from "../organization/routes.js";
+import { employeeRouter } from "../employees/routes.js";
 
 export const platformRouter = Router();
 export const workspaceCompanyRouter = Router();
@@ -26,6 +27,7 @@ const actor = (response: Response): tenants.Actor => ({
   profile: response.locals.profile, requestId: response.locals.requestId,
 });
 workspaceCompanyRouter.use("/organization", organizationRouter);
+workspaceCompanyRouter.use("/employees", employeeRouter);
 const companyId = (request: Request) => z.uuid().parse(request.params.companyId);
 const membershipId = (request: Request) => z.uuid().parse(request.params.membershipId);
 const listQuery = z.strictObject({

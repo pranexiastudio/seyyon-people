@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { companyAdminRole, organizationPermissions, readTenantConfig } from "@seyyon/shared";
+import { companyAdminRole, employeePermissions, organizationPermissions, readTenantConfig } from "@seyyon/shared";
 import type { AuthProfile, CompanyInput, TenantConfig } from "@seyyon/shared";
 import type { Prisma, TenantStatus } from "../../generated/prisma/client.js";
 import { database } from "../../lib/database.js";
@@ -83,7 +83,7 @@ function ensureCompanyAdminRole(tx: Tx, tenantId: string) {
       tenantId,
       name: companyAdminRole,
       permissions: {
-        create: Object.values(organizationPermissions).map((key) => ({
+        create: [...Object.values(organizationPermissions), ...Object.values(employeePermissions)].map((key) => ({
           permission: { connect: { key } },
         })),
       },

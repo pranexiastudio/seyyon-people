@@ -17,6 +17,19 @@ enum MembershipStatus {
   DISABLED
 }
 
+enum EmploymentStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  RESIGNED
+  TERMINATED
+}
+
+enum EmployeeChangeKind {
+  STATUS
+  MANAGER
+}
+
 model Tenant {
   id          String       @id @default(uuid()) @db.Uuid
   name        String       @db.VarChar(200)
@@ -65,6 +78,7 @@ model User {
   lockedUntil DateTime? @map("locked_until") @db.Timestamptz(3)
   sessions AuthSession[]
   resetTokens PasswordReset[]
+  employeeChanges EmployeeChange[] @relation("EmployeeChangeActor")
 
   @@map("users")
 }
@@ -346,6 +360,14 @@ model Employee {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   employeeNumber String @map("employee_number") @db.VarChar(40)
   displayName String @map("display_name") @db.VarChar(200)
+  firstName String? @map("first_name") @db.VarChar(100)
+  lastName String? @map("last_name") @db.VarChar(100)
+  workEmail String? @map("work_email") @db.VarChar(320)
+  personalEmail String? @map("personal_email") @db.VarChar(320)
+  personalPhone String? @map("personal_phone") @db.VarChar(40)
+  joinedOn DateTime? @map("joined_on") @db.Date
+  employmentStatus EmploymentStatus @default(ACTIVE) @map("employment_status")
+  version Int @default(1)
   membershipId String? @map("membership_id") @db.Uuid
   branchId String? @map("branch_id") @db.Uuid
   departmentId String? @map("department_id") @db.Uuid
@@ -364,10 +386,14 @@ model Employee {
   workLocation WorkLocation? @relation(fields: [tenantId, workLocationId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
   manager Employee? @relation("EmployeeManager", fields: [tenantId, managerId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
   directReports Employee[] @relation("EmployeeManager")
+  changes EmployeeChange[] @relation("EmployeeChangeSubject")
+  previousManagerChanges EmployeeChange[] @relation("EmployeeChangePreviousManager")
+  newManagerChanges EmployeeChange[] @relation("EmployeeChangeNewManager")
   @@unique([tenantId, employeeNumber])
   @@unique([tenantId, membershipId])
   @@unique([tenantId, departmentId, id])
   @@index([tenantId, displayName])
+  @@index([tenantId, employmentStatus, displayName, id], map: "employees_tenant_status_name_id_idx")
   @@index([tenantId, branchId])
   @@index([tenantId, managerId])
   @@index([tenantId, designationId])
@@ -376,5 +402,26 @@ model Employee {
   @@index([tenantId, workLocationId])
   @@unique([tenantId, id])
   @@map("employees")
+}
+
+model EmployeeChange {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  employeeId String @map("employee_id") @db.Uuid
+  actorId String @map("actor_id") @db.Uuid
+  kind EmployeeChangeKind
+  previousStatus EmploymentStatus? @map("previous_status")
+  newStatus EmploymentStatus? @map("new_status")
+  previousManagerId String? @map("previous_manager_id") @db.Uuid
+  newManagerId String? @map("new_manager_id") @db.Uuid
+  requestId String @map("request_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  employee Employee @relation("EmployeeChangeSubject", fields: [tenantId, employeeId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  actor User @relation("EmployeeChangeActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  previousManager Employee? @relation("EmployeeChangePreviousManager", fields: [tenantId, previousManagerId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+  newManager Employee? @relation("EmployeeChangeNewManager", fields: [tenantId, newManagerId], references: [tenantId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([tenantId, employeeId, createdAt, id], map: "employee_changes_tenant_employee_time_idx")
+  @@map("employee_changes")
 }
 

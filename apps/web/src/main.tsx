@@ -13,6 +13,10 @@ import { CompanyDetailsPage, CompanyEditor, CompanyListPage } from "./pages/admi
 import { TenantAdminsPage } from "./pages/administration/admins";
 import { TenantConfigurationPage } from "./pages/administration/configuration";
 import { OrganizationPage } from "./pages/organization/catalog";
+import { EmployeeDirectory } from "./pages/employees/directory";
+import { EmployeeEditor } from "./pages/employees/editor";
+import { EmployeeProfile } from "./pages/employees/profile";
+import { EmployeeWorkspace, employeeHome } from "./pages/employees/shared";
 import "./styles.css";
 
 const queryClient = new QueryClient();
@@ -28,6 +32,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/reset-password" element={<PasswordPage reset />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/app" element={<AccountPage />} />
+            <Route element={<EmployeeWorkspace />}>
+              <Route path={employeeHome} element={<EmployeeDirectory />} />
+              <Route path={employeeHome + "/new"} element={<EmployeeEditor />} />
+              <Route path={employeeHome + "/:id"} element={<EmployeeProfile />} />
+              <Route path={employeeHome + "/:id/edit"} element={<EmployeeEditor editing />} />
+            </Route>
             <Route element={<AdministrationLayout platform={false} organization />}>
               <Route path="/app/organization/:catalog?" element={<OrganizationPage />} />
             </Route>

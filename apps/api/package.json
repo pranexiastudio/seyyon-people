@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "test": "tsx --env-file=../../.env --test src/modules/health/health.test.ts src/middleware/auth.test.ts",
     "test:db": "tsx --env-file=../../.env --test test/rls.integration.ts test/auth.integration.ts test/tenants.integration.ts",
-    "test:organization": "tsx --env-file=../../.env --test test/organization.integration.ts"
+    "test:organization": "tsx --env-file=../../.env --test test/organization.integration.ts",
+    "test:employees": "tsx --env-file=../../.env --test test/employees.integration.ts test/employee-lifecycle.integration.ts"
   },
   "dependencies": {
     "@seyyon/shared": "0.1.0",

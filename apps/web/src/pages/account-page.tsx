@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ShieldCheck, Users, LogOut, Monitor } from "lucide-react";
 import { Link } from "react-router";
-import { companyAdminRole, organizationPermissions } from "@seyyon/shared";
+import { companyAdminRole, employeePermissions, organizationPermissions } from "@seyyon/shared";
 import { z } from "zod";
 import { useAuth } from "@/auth/auth-provider";
 import { authRequest } from "@/lib/auth-api";
 import { Button } from "@/components/ui/button";
 import { inputClass } from "@/components/auth/password-field";
+import { employeeHome } from "./employees/shared";
 
 const sessionsSchema = z.array(z.object({ id: z.uuid(), createdAt: z.string(), expiresAt: z.string(), platform: z.boolean(), tenantId: z.uuid().nullable() }));
 export function AccountPage() {
@@ -48,6 +49,8 @@ export function AccountPage() {
           {(profile.platform || isCompanyAdmin) && <Button variant="outline" asChild><Link to={profile.platform ? "/platform" : companyHome}>{profile.platform ? "Platform dashboard" : "Manage company"}</Link></Button>}
           {!profile.platform && profile.permissions.includes(organizationPermissions.read) &&
             <Button variant="outline" asChild><Link to="/app/organization">Organization</Link></Button>}
+          {!profile.platform && profile.permissions.includes(employeePermissions.read) &&
+            <Button variant="outline" asChild><Link to={employeeHome}>Employees</Link></Button>}
         </div>
       </section>
       <section className="rounded-2xl border border-border bg-card p-6"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-lg font-semibold"><Monitor size={20} />Active sessions</h2><Button variant="outline" disabled={busy} onClick={() => void action(() => auth.logout(true))}>Sign out everywhere</Button></div>

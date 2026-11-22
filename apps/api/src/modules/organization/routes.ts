@@ -1,7 +1,7 @@
 import { Router, type Response } from "express";
 import { z } from "zod";
 import {
-  branchSchema, catalogQuery, catalogStatusQuery, departmentSchema, designationSchema,
+  branchSchema, catalogQuery, catalogStatusQuery, departmentHeadSchema, departmentSchema, designationSchema,
   jobGradeSchema, organizationPermissions, workLocationKinds, workLocationSchema,
   type AuthProfile, type CatalogRow,
 } from "@seyyon/shared";
@@ -25,7 +25,8 @@ type Write<T> = Scope & {
 const identity = { id: true, name: true, code: true } as const;
 const summary = { ...identity, active: true } as const;
 const branch = { ...summary, address: true, contactEmail: true, contactPhone: true, isPrimary: true } as const;
-const department = { ...summary, description: true } as const;
+const headFields = { id: true, displayName: true, employeeNumber: true } as const;
+const department = { ...summary, description: true, head: { select: headFields } } as const;
 const designation = { ...summary, departmentId: true, jobLevel: true, department: { select: identity } } as const;
 const grade = { ...summary, rank: true, description: true } as const;
 const location = { ...summary, kind: true, address: true, branchId: true, branch: { select: identity } } as const;
@@ -36,11 +37,14 @@ const inUse = (message: string) => new HttpError(409, "ORGANIZATION_RECORD_IN_US
 
 export const organizationRouter = Router();
 
-function scope<T>(response: Response, writing: boolean, operation: (context: Scope) => Promise<T>) {
+function scope<T>(response: Response, permission: string, operation: (context: Scope) => Promise<T>, writing = false) {
   const profile: AuthProfile = response.locals.profile;
   const tenantId = profile.tenantId;
   if (profile.platform || !tenantId) throw new HttpError(403, "FORBIDDEN", "Company workspace required.");
-  return withTenant(profile.user.id, tenantId, writing ? organizationPermissions.manage : organizationPermissions.read, async (tx) => {
+  return withTenant(profile.user.id, tenantId, permission, async (tx, grants) => {
+    if (permission === organizationPermissions.manageReporting && !grants.has(organizationPermissions.read)) {
+      throw new HttpError(403, "FORBIDDEN", "Organization read permission required.");
+    }
     if (writing) {
       await lockTenant(tx, tenantId);
       const tenant = await tx.tenant.findUnique({ where: { id: tenantId }, select: { status: true } });
@@ -85,12 +89,12 @@ function register<Q extends Query, T extends CatalogInput>(
 ) {
   organizationRouter.get(path, async (request, response) => {
     const query = parse(reader.query, request.query);
-    const result = await scope(response, false, (context) => reader.list(context, query));
+    const result = await scope(response, organizationPermissions.read, (context) => reader.list(context, query));
     response.json({ ...result, page: query.page, limit: query.limit });
   });
   organizationRouter.get(path + "/:id", async (request, response) => {
     const id = parse(z.uuid(), request.params.id);
-    const item = await scope(response, false, (context) => reader.get(context, id));
+    const item = await scope(response, organizationPermissions.read, (context) => reader.get(context, id));
     if (!item) throw notFound();
     response.json(item);
   });
@@ -100,7 +104,7 @@ function register<Q extends Query, T extends CatalogInput>(
   async function save(response: Response, id: string | null, body: unknown) {
     const changes = id ? parse(patch, body) : parse(create, body);
     try {
-      return await scope(response, true, async ({ tx, tenantId }) => {
+      return await scope(response, organizationPermissions.manage, async ({ tx, tenantId }) => {
         const current = id ? await reader.get({ tx, tenantId }, id) : null;
         if (id && !current) throw notFound();
         const active = "active" in changes && typeof changes.active === "boolean" ? changes.active : current?.active ?? true;
@@ -120,7 +124,7 @@ function register<Q extends Query, T extends CatalogInput>(
           await audit(result.isPrimary ? "BRANCH_PRIMARY_SET" : "BRANCH_PRIMARY_CLEARED", result.id);
         }
         return result;
-      });
+      }, true);
     } catch (error) {
       if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
         const target = "meta" in error && JSON.stringify(error.meta)?.includes("rank");
@@ -202,6 +206,53 @@ register("/departments", "DEPARTMENT", {
     return id ? tx.department.update({ where: { tenantId_id: { tenantId, id } }, data: { ...input, active }, select: department })
       : tx.department.create({ data: { ...input, tenantId }, select: department });
   },
+});
+
+organizationRouter.get("/departments/:id/head-candidates", async (request, response) => {
+  const id = parse(z.uuid(), request.params.id);
+  const { search, page, limit } = parse(catalogQuery, request.query);
+  const result = await scope(response, organizationPermissions.manageReporting, async ({ tx, tenantId }) => {
+    const target = await tx.department.findUnique({ where: { tenantId_id: { tenantId, id } }, select: { active: true } });
+    if (!target) throw notFound();
+    if (!target.active) return { items: [], total: 0, page, limit };
+    const contains = { contains: search.replace(/[\\%_]/g, "\\$&"), mode: "insensitive" as const };
+    const where = {
+      tenantId, departmentId: id, active: true,
+      OR: search ? [{ displayName: contains }, { employeeNumber: contains }] : undefined,
+    };
+    const items = await tx.employee.findMany({
+      where, select: headFields, orderBy: [{ displayName: "asc" }, { id: "asc" }], skip: (page - 1) * limit, take: limit,
+    });
+    return { items, total: await tx.employee.count({ where }), page, limit };
+  });
+  response.json(result);
+});
+
+organizationRouter.put("/departments/:id/head", async (request, response) => {
+  const id = parse(z.uuid(), request.params.id);
+  const { headId } = parse(departmentHeadSchema, request.body);
+  const result = await scope(response, organizationPermissions.manageReporting, async ({ tx, tenantId }) => {
+    const where = { tenantId_id: { tenantId, id } };
+    const current = await tx.department.findUnique({ where, select: department });
+    if (!current) throw notFound();
+    if (headId !== null) {
+      if (!current.active) throw inactiveReference("department");
+      const candidate = await tx.employee.findUnique({
+        where: { tenantId_id: { tenantId, id: headId } }, select: { active: true, departmentId: true },
+      });
+      if (!candidate || !candidate.active || candidate.departmentId !== id) {
+        throw new HttpError(409, "INELIGIBLE_DEPARTMENT_HEAD", "Choose an active employee assigned to this department.");
+      }
+    }
+    if (headId === (current.head?.id ?? null)) return current;
+    const updated = await tx.department.update({ where, data: { headId }, select: department });
+    await writeTenantAudit(tx, {
+      tenantId, actorId: response.locals.profile.user.id, requestId: response.locals.requestId, entityId: id,
+      action: headId === null ? "DEPARTMENT_HEAD_CLEARED" : current.head ? "DEPARTMENT_HEAD_REPLACED" : "DEPARTMENT_HEAD_ASSIGNED",
+    });
+    return updated;
+  }, true);
+  response.json(result);
 });
 
 register("/designations", "DESIGNATION", {

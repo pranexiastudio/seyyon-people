@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { z } from "zod";
 import {
   branchSchema, departmentSchema, designationSchema, jobGradeSchema, organizationPermissions,
-  workLocationKinds, workLocationSchema, type CatalogPage, type CatalogRow,
+  workLocationKinds, workLocationSchema, type CatalogPage, type CatalogRow, type DepartmentHead,
 } from "@seyyon/shared";
 import { useAuth } from "@/auth/auth-provider";
 import { apiRequest } from "@/lib/auth-api";
@@ -68,10 +68,13 @@ export function OrganizationPage() {
     return <Feedback error="Organization access requires a workspace permission." />;
   }
   return <CatalogScreen key={membershipId + "/" + catalog} catalog={catalog as Catalog} membershipId={membershipId}
-    canManage={profile.permissions.includes(organizationPermissions.manage)} />;
+    canManage={profile.permissions.includes(organizationPermissions.manage)}
+    canManageHeads={profile.permissions.includes(organizationPermissions.manageReporting)} />;
 }
 
-function CatalogScreen({ catalog, membershipId, canManage }: { catalog: Catalog; membershipId: string; canManage: boolean }) {
+function CatalogScreen({ catalog, membershipId, canManage, canManageHeads }: {
+  catalog: Catalog; membershipId: string; canManage: boolean; canManageHeads: boolean;
+}) {
   const definition: Definition = definitions[catalog];
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
@@ -108,6 +111,7 @@ function CatalogScreen({ catalog, membershipId, canManage }: { catalog: Catalog;
     queryFn: () => read<CatalogRow>("/departments/" + departmentId),
     enabled: catalog === "designations" && !!departmentId,
   });
+  const departmentDetail = catalog === "departments" ? detail.data : undefined;
   const lastPage = Math.max(1, Math.ceil((list.data?.total ?? 0) / (list.data?.limit ?? 15)));
   const resetPage = (nextPage: number) => {
     const next = new URLSearchParams(params);
@@ -163,6 +167,17 @@ function CatalogScreen({ catalog, membershipId, canManage }: { catalog: Catalog;
       {!readOnly && (selection.mode === "create" || selection.mode === "edit" && detail.data) &&
         <Editor key={selectedId ?? "new"} definition={definition} row={selection.mode === "edit" ? detail.data : undefined}
           read={read} membershipId={membershipId} busy={operation.busy} onSave={save} />}
+      {departmentDetail && selection.mode !== "create" &&
+        <DepartmentHeadPanel key={departmentDetail.id + "/" + (departmentDetail.head?.id ?? "")} row={departmentDetail}
+          canManage={canManageHeads} read={read} membershipId={membershipId} busy={operation.busy}
+          onSave={(headId) => operation.run(async () => {
+            const updated = await read<CatalogRow>("/departments/" + departmentDetail.id + "/head", {
+              method: "PUT", body: JSON.stringify({ headId }),
+            });
+            queryClient.setQueryData([...baseKey, catalog, "detail", updated.id], updated);
+            await queryClient.invalidateQueries({ queryKey: baseKey });
+            return headId === null ? "Department head cleared." : "Department head saved.";
+          })} />}
     </section>}
     {confirmation && <section className={panel} role="group" aria-label="Confirm status change">
       <p className="mb-3 break-words">{confirmation.active ? "Deactivate" : "Reactivate"} {confirmation.name}?</p>
@@ -234,6 +249,52 @@ function CatalogScreen({ catalog, membershipId, canManage }: { catalog: Catalog;
       </div>}
     </section>
   </>;
+}
+
+function DepartmentHeadPanel({ row, canManage, read, membershipId, busy, onSave }: {
+  row: CatalogRow; canManage: boolean; read: RequestCatalog; membershipId: string; busy: boolean;
+  onSave: (headId: string | null) => Promise<void>;
+}) {
+  const [choosing, setChoosing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [candidateId, setCandidateId] = useState("");
+  const path = "/departments/" + row.id + "/head-candidates";
+  const options = useQuery({
+    queryKey: ["organization", membershipId, "department-head-candidates", row.id, search],
+    queryFn: () => read<{ items: DepartmentHead[] }>(path + "?" + new URLSearchParams({ search, limit: "20" })),
+    enabled: canManage && !!row.active && choosing,
+    retry: false,
+  });
+  const candidates = options.data?.items.filter(({ id }) => id !== row.head?.id) ?? [];
+  return <section className="mt-5 space-y-3 border-t border-border pt-4" aria-label="Department head">
+    <h3 className="font-semibold">Department head</h3>
+    <p className="break-words">{row.head ? row.head.displayName + " (" + row.head.employeeNumber + ")" : "No department head assigned."}</p>
+    {canManage && <div className="flex flex-wrap gap-2">
+      {row.active && <Button type="button" variant="outline" disabled={busy} aria-expanded={choosing}
+        onClick={() => setChoosing(!choosing)}>{choosing ? "Cancel selection" : row.head ? "Reassign department head" : "Assign department head"}</Button>}
+      {row.head && <Button type="button" variant="outline" disabled={busy}
+        onClick={() => void onSave(null)}>Clear department head</Button>}
+    </div>}
+    {choosing && canManage && row.active && <form className="space-y-3" onSubmit={(event) => {
+      event.preventDefault();
+      if (candidates.some(({ id }) => id === candidateId)) void onSave(candidateId);
+    }}>
+      <label className="block text-sm font-medium">Find eligible employee
+        <input type="search" className={inputClass + " mt-1"} value={search} maxLength={200} disabled={busy}
+          onChange={(event) => { setSearch(event.target.value); setCandidateId(""); }} />
+      </label>
+      <label className="block text-sm font-medium">New department head
+        <select className={inputClass + " mt-1"} value={candidateId} disabled={busy} onChange={(event) => setCandidateId(event.target.value)}>
+          <option value="">Choose an active employee</option>
+          {candidates.map(({ id, displayName, employeeNumber }) => <option key={id} value={id}>{displayName} ({employeeNumber})</option>)}
+        </select>
+      </label>
+      {options.isFetching && <Loading />}
+      <Feedback error={options.error?.message} />
+      {options.data && !candidates.length && <p className="text-sm text-muted-foreground">No eligible employees match this search.</p>}
+      <Button type="submit" disabled={busy || !candidates.some(({ id }) => id === candidateId)}>Save department head</Button>
+    </form>}
+  </section>;
 }
 
 function present(row: CatalogRow | undefined, field: Field) {

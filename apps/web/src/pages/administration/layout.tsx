@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { companyAdminRole, organizationPermissions, type TenantConfig } from "@seyyon/shared";
+import { companyAdminRole, employeePermissions, organizationPermissions, type TenantConfig } from "@seyyon/shared";
 import { apiRequest } from "@/lib/auth-api";
 import { NavLink, Outlet } from "react-router";
 import { Building2, LayoutDashboard, LogOut, Network, Settings2, ShieldCheck, Users } from "lucide-react";
@@ -14,11 +14,12 @@ export const actionLabel = (value: string) => {
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
-export function AdministrationLayout({ platform, organization = false }: { platform: boolean; organization?: boolean }) {
+export function AdministrationLayout({ platform, organization = false, employees = false }: { platform: boolean; organization?: boolean; employees?: boolean }) {
   const { profile, logout } = useAuth();
   const [failure, setFailure] = useState("");
   const canManageCompany = !platform && !!profile?.roles.includes(companyAdminRole);
   const canReadOrganization = !platform && !!profile?.permissions.includes(organizationPermissions.read);
+  const canReadEmployees = !platform && !!profile?.permissions.includes(employeePermissions.read);
   const membershipId = profile?.contexts.find((entry) => entry.tenantId === profile.tenantId)?.id;
   const configuration = useQuery({
     queryKey: ["company", "/workspace/company", membershipId, "configuration"],
@@ -26,8 +27,8 @@ export function AdministrationLayout({ platform, organization = false }: { platf
     enabled: canManageCompany,
   });
   const branding = canManageCompany ? configuration.data?.branding : undefined;
-  if (!platform && !(organization ? canReadOrganization : canManageCompany)) {
-    return <main className="p-8"><Feedback error={organization ? "Organization access requires a workspace permission." : "Company administrator access required."} />
+  if (!platform && !(employees ? canReadEmployees : organization ? canReadOrganization : canManageCompany)) {
+    return <main className="p-8"><Feedback error={employees ? "Employee access requires a workspace permission." : organization ? "Organization access requires a workspace permission." : "Company administrator access required."} />
       <Button variant="outline" asChild><NavLink to="/app">Back to your account</NavLink></Button></main>;
   }
   const nav = platform
@@ -37,6 +38,7 @@ export function AdministrationLayout({ platform, organization = false }: { platf
     : [...(canManageCompany ? [{ to: "/app/company", name: "Company profile", icon: Building2, end: true },
       { to: "/app/company/configuration", name: "Configuration", icon: Settings2 }] : []),
       ...(canReadOrganization ? [{ to: "/app/organization", name: "Organization", icon: Network }] : []),
+      ...(canReadEmployees ? [{ to: "/app/employees", name: "Employees", icon: Users }] : []),
       { to: "/app", name: "Account & security", icon: ShieldCheck, end: true }];
   return <div className="min-h-screen lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
     <aside className="flex flex-col gap-5 border-b border-border bg-card px-5 py-5 lg:sticky lg:top-0 lg:h-screen lg:border-r lg:border-b-0 lg:px-4 lg:py-8">

@@ -42,3 +42,4 @@ export type AuthProfile = z.infer<typeof authProfileSchema>;
 
 export * from "./tenant.js";
 export * from "./organization.js";
+export * from "./employees.js";

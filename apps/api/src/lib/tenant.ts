@@ -12,7 +12,7 @@ export async function withTenant<Result>(
   actorId: string,
   selectedTenantId: string,
   permission: string | null,
-  operation: (transaction: Prisma.TransactionClient) => Promise<Result>,
+  operation: (transaction: Prisma.TransactionClient, permissions: ReadonlySet<string>) => Promise<Result>,
 ): Promise<Result> {
   const tenantId = z.uuid().parse(selectedTenantId);
   const userId = z.uuid().parse(actorId);
@@ -25,10 +25,9 @@ export async function withTenant<Result>(
     if (!membership || membership.status !== "ACTIVE" || membership.user.disabled || membership.tenant.status !== "ACTIVE") {
       throw new HttpError(403, "TENANT_ACCESS_DENIED", "Company access denied.");
     }
-    const permitted = membership.roles.some((assignment) =>
-      assignment.role.permissions.some((grant) => grant.permission.key === permission));
-    if (permission && !permitted) throw new HttpError(403, "FORBIDDEN", "Permission required.");
-    return operation(transaction);
+    const permissions = new Set(membership.roles.flatMap(({ role }) => role.permissions.map(({ permission }) => permission.key)));
+    if (permission && !permissions.has(permission)) throw new HttpError(403, "FORBIDDEN", "Permission required.");
+    return operation(transaction, permissions);
   });
 }
 

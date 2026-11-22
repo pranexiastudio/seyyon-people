@@ -4,7 +4,7 @@ const base = import.meta.env.VITE_API_URL || "/api/v1";
 let accessToken: string | null = null;
 let refreshPromise: Promise<Awaited<ReturnType<typeof performRefresh>>> | null = null;
 export class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  constructor(public status: number, message: string, public code?: string) { super(message); }
 }
 async function raw(path: string, options: RequestInit = {}, prefix = "/auth") {
   const headers = new Headers(options.headers);
@@ -13,7 +13,7 @@ async function raw(path: string, options: RequestInit = {}, prefix = "/auth") {
   const response = await fetch(base + prefix + path, { ...options, credentials: "include", headers });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new ApiError(response.status, body?.error?.message || "Unable to connect. Please try again.");
+    throw new ApiError(response.status, body?.error?.message || "Unable to connect. Please try again.", body?.error?.code);
   }
   return response.status === 204 ? undefined : response.json();
 }
